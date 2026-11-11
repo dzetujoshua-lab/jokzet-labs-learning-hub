@@ -1,0 +1,73 @@
+{
+  "name": "Assessment",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "department_code": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Practical",
+        "Quiz",
+        "Project review",
+        "Peer review"
+      ],
+      "enumColors": [
+        "green",
+        "blue",
+        "purple",
+        "yellow"
+      ]
+    },
+    "score": {
+      "type": "number"
+    },
+    "max_score": {
+      "type": "number",
+      "default": 100
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "pass",
+        "revise"
+      ],
+      "enumColors": [
+        "gray",
+        "green",
+        "red"
+      ],
+      "default": "pending"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "department_code"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

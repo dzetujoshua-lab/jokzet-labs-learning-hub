@@ -1,0 +1,104 @@
+{
+  "name": "Mission",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "department_code": {
+      "type": "string"
+    },
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "minutes": {
+      "type": "number",
+      "default": 45
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "Build",
+        "Design",
+        "Drill",
+        "Study",
+        "Shoot",
+        "Edit",
+        "Write",
+        "Ship"
+      ],
+      "enumColors": [
+        "green",
+        "purple",
+        "red",
+        "blue",
+        "yellow",
+        "pink",
+        "gray",
+        "green"
+      ]
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": [
+        "Screenshot",
+        "Photo",
+        "Video",
+        "Code",
+        "Document",
+        "Link"
+      ],
+      "enumColors": [
+        "blue",
+        "yellow",
+        "pink",
+        "green",
+        "purple",
+        "gray"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "active",
+        "done",
+        "skipped"
+      ],
+      "enumColors": [
+        "gray",
+        "yellow",
+        "green",
+        "red"
+      ],
+      "default": "planned"
+    },
+    "xp_reward": {
+      "type": "number",
+      "default": 25
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "department_code",
+    "date"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "Reminder",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "department_code": {
+      "type": "string"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "note": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "done",
+        "snoozed"
+      ],
+      "enumColors": [
+        "yellow",
+        "green",
+        "gray"
+      ],
+      "default": "open"
+    }
+  },
+  "required": [
+    "title",
+    "due_date"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

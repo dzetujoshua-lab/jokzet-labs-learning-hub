@@ -1,0 +1,71 @@
+{
+  "name": "PortfolioPiece",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "department_code": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "tools": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "concept",
+        "building",
+        "shipped"
+      ],
+      "enumColors": [
+        "gray",
+        "yellow",
+        "green"
+      ],
+      "default": "concept"
+    },
+    "is_capstone": {
+      "type": "boolean",
+      "default": false
+    },
+    "stage": {
+      "type": "number",
+      "default": 0
+    },
+    "stages": {
+      "type": "number",
+      "default": 8
+    },
+    "media_url": {
+      "type": "string"
+    },
+    "link_url": {
+      "type": "string"
+    },
+    "completed_date": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

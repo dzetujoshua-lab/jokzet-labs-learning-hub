@@ -1,0 +1,80 @@
+{
+  "name": "Evidence",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "department_code": {
+      "type": "string"
+    },
+    "mission_title": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Screenshot",
+        "Photo",
+        "Video",
+        "Code",
+        "Document",
+        "Link"
+      ],
+      "enumColors": [
+        "blue",
+        "yellow",
+        "pink",
+        "green",
+        "purple",
+        "gray"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "link_url": {
+      "type": "string"
+    },
+    "file_uri": {
+      "type": "string"
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "captured_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "logged",
+        "verified"
+      ],
+      "enumColors": [
+        "gray",
+        "green"
+      ],
+      "default": "logged"
+    }
+  },
+  "required": [
+    "title",
+    "department_code"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}
