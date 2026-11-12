@@ -4,6 +4,11 @@
 [build]
   command = "npm run build"
 
+# The Next.js runtime plugin builds the server function and chooses the publish directory itself.
+# Do NOT set a publish directory in the Netlify UI: a custom one turns this into a plain static deploy.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --no-fund"
