@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { authenticate, registerUser } from "@/lib/auth/service";
 import { endSession, startSession } from "@/lib/auth/dal";
 import { loginSchema, registerSchema } from "@/lib/auth/validation";
+import { LIMITS, bucketKey, clientIp, rateLimitHit } from "@/lib/ratelimit";
 
 export type FormState = {
   error?: string;
@@ -15,7 +16,7 @@ export type FormState = {
 
 async function requestMeta() {
   const h = await headers();
-  return { userAgent: h.get("user-agent"), ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null };
+  return { userAgent: h.get("user-agent"), ipAddress: clientIp(h) };
 }
 
 function fieldErrorsFrom(issues: { path: PropertyKey[]; message: string }[]) {
@@ -30,6 +31,11 @@ function fieldErrorsFrom(issues: { path: PropertyKey[]; message: string }[]) {
 export async function register(_prev: FormState, formData: FormData): Promise<FormState> {
   if (process.env.ALLOW_REGISTRATION === "false") {
     return { error: "Registration is closed." };
+  }
+  const meta = await requestMeta();
+  const registerLimit = await rateLimitHit(bucketKey("register:ip", meta.ipAddress ?? "unknown"), LIMITS.registerIp);
+  if (!registerLimit.ok) {
+    return { error: "Too many sign-up attempts from this network. Please try again later." };
   }
   const parsed = registerSchema.safeParse({
     displayName: formData.get("displayName"),
@@ -49,7 +55,7 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
     // Deliberately generic: do not confirm which emails are registered.
     return { error: "We could not create that account. Try a different email or sign in.", email: parsed.data.email, displayName: parsed.data.displayName };
   }
-  await startSession(result.userId, await requestMeta());
+  await startSession(result.userId, meta);
   redirect("/");
 }
 
@@ -58,17 +64,16 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFrom(parsed.error.issues), email: String(formData.get("email") ?? "") };
   }
-  const result = await authenticate(parsed.data);
+  const meta = await requestMeta();
+  const result = await authenticate(parsed.data, { ip: meta.ipAddress ?? undefined });
   if (!result.ok) {
     return {
-      error:
-        result.error === "LOCKED"
-          ? "Too many failed attempts. Try again in 15 minutes."
-          : "Incorrect email or password.",
+      // One message for every failure (wrong password, unknown email, disabled account, throttled): no account oracle.
+      error: "Incorrect email or password, or too many attempts. Wait a few minutes and try again.",
       email: parsed.data.email,
     };
   }
-  await startSession(result.userId, await requestMeta());
+  await startSession(result.userId, meta);
   redirect("/");
 }
 

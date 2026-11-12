@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { authenticate, registerUser, LOCKOUT_MS, MAX_FAILED_LOGINS } from "@/lib/auth/service";
+import { authenticate, registerUser } from "@/lib/auth/service";
 import { createSessionRecord, deleteSessionByToken, hashToken, resolveSession } from "@/lib/auth/sessions";
 import { loginSchema, passwordSchema, registerSchema } from "@/lib/auth/validation";
 
@@ -75,7 +75,7 @@ describe("registration", () => {
   });
 });
 
-describe("authentication and lockout", () => {
+describe("authentication (brute-force limits are covered in security-hardening.test.ts)", () => {
   it("returns the same error for unknown email and wrong password", async () => {
     const unknown = await authenticate({ email: "auth-test-nobody@example.test", password: "whatever-123456" });
     const wrong = await authenticate({ email: EMAIL, password: "wrong-password-123" });
@@ -88,24 +88,6 @@ describe("authentication and lockout", () => {
     expect(result.ok).toBe(true);
     const user = await db.user.findUniqueOrThrow({ where: { email: EMAIL } });
     expect(user.failedLogins).toBe(0);
-  });
-
-  it("locks the account after repeated failures, even for the right password", async () => {
-    await registerUser({ displayName: "Lock", email: "auth-test-lock@example.test", password: PASSWORD });
-    let last;
-    for (let i = 0; i < MAX_FAILED_LOGINS; i++) {
-      last = await authenticate({ email: "auth-test-lock@example.test", password: "bad-password-123" });
-    }
-    expect(last).toEqual({ ok: false, error: "LOCKED" });
-    const correct = await authenticate({ email: "auth-test-lock@example.test", password: PASSWORD });
-    expect(correct).toEqual({ ok: false, error: "LOCKED" });
-
-    // Lock expires.
-    await db.user.update({
-      where: { email: "auth-test-lock@example.test" },
-      data: { lockedUntil: new Date(Date.now() - LOCKOUT_MS) },
-    });
-    expect((await authenticate({ email: "auth-test-lock@example.test", password: PASSWORD })).ok).toBe(true);
   });
 
   it("rejects disabled users", async () => {

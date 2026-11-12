@@ -970,3 +970,15 @@ model BosExpense {
 
   @@index([userId, date])
 }
+
+// ─────────────── Security ───────────────
+/// Fixed-window request counters used by the database-backed rate limiter (src/lib/ratelimit.ts).
+/// `key` is an opaque string such as "login:ip:<hash>"; rows older than a day are purged.
+model RateLimitBucket {
+  key         String
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+}

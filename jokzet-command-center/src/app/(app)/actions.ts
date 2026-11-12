@@ -7,7 +7,8 @@ import { setCorrectionResolved, assessSubmission, type AssessResult } from "@/li
 import { deleteEvidence } from "@/lib/evidence/service";
 import { attachToDraft, detachFromDraft } from "@/lib/missions/submissions";
 import { createMissionSchema } from "@/lib/missions/schema";
-import { saveProgress, startMission, submitMission } from "@/lib/missions/progress";
+import { saveProgress, saveProgressSchema, startMission, submitMission } from "@/lib/missions/progress";
+import { milestoneSchema } from "@/lib/missions/schema";
 import { createCustomMission, deleteMission, saveNextMilestone, setMissionDone } from "@/lib/missions/service";
 import { createTestNotification, markAllRead } from "@/lib/notifications/engine";
 import { setDailyStatus, USER_SETTABLE } from "@/lib/schedule/daily";
@@ -18,6 +19,7 @@ import {
   adjustStock, createSale, deleteContact, deleteExpense, deleteProduct, recordPayment, restock, saveContact, saveExpense, saveProduct, voidSale,
   type ContactInput, type ExpenseInput, type ProductInput, type RestockInput, type SaleInput,
 } from "@/lib/businessos/service";
+import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -54,6 +56,8 @@ export async function createMission(_prev: MissionFormState, formData: FormData)
 
 export async function updateMilestone(departmentId: string, text: string): Promise<{ ok: boolean; error?: string }> {
   const user = await requireUser();
+  const checked = milestoneSchema.safeParse(text);
+  if (!checked.success) return { ok: false, error: checked.error.issues[0]?.message ?? "Check the milestone and try again." };
   try {
     const saved = await saveNextMilestone(user.id, idSchema.parse(departmentId), text);
     refresh();
@@ -77,10 +81,10 @@ export type WorkflowState = { ok?: boolean; error?: string; message?: string } |
 
 export async function saveProgressAction(learnerMissionId: string, _prev: WorkflowState, formData: FormData): Promise<WorkflowState> {
   const user = await requireUser();
-  const saved = await saveProgress(user.id, idSchema.parse(learnerMissionId), {
-    completedSteps: formData.getAll("step").map(String),
-    notes: String(formData.get("notes") ?? ""),
-  });
+  const input = { completedSteps: formData.getAll("step").map(String), notes: String(formData.get("notes") ?? "") };
+  const checked = saveProgressSchema.safeParse(input);
+  if (!checked.success) return { error: checked.error.issues[0]?.message ?? "Check your notes and try again." };
+  const saved = await saveProgress(user.id, idSchema.parse(learnerMissionId), input);
   if (!saved) return { error: "Mission not found." };
   refresh();
   return { ok: true, message: "Progress saved" };
@@ -143,6 +147,8 @@ export async function setDailyStatusAction(instanceId: string, status: string): 
 
 export async function sendTestNotificationAction(): Promise<{ ok: boolean }> {
   const user = await requireUser();
+  const allowed = await rateLimitHit(bucketKey("testnotif:user", user.id), LIMITS.testNotificationUser);
+  if (!allowed.ok) return { ok: false };
   const key = await createTestNotification(user.id);
   refresh();
   return { ok: key !== null };
