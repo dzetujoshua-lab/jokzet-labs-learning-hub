@@ -13,6 +13,7 @@ import { createTestNotification, markAllRead } from "@/lib/notifications/engine"
 import { setDailyStatus, USER_SETTABLE } from "@/lib/schedule/daily";
 import { confirmImport, previewImport, type ImportPreview, type ImportResult } from "@/lib/schedule/importer";
 import { MAX_IMPORT_BYTES } from "@/lib/schedule/constants";
+import { addFromMission, deletePiece, moveCapstoneStage, saveCapstone, savePiece, type CapstoneInput, type PieceInput } from "@/lib/portfolio/service";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -184,4 +185,41 @@ export async function resolveCorrectionAction(feedbackId: string, resolved: bool
   const user = await requireUser();
   await setCorrectionResolved(user.id, idSchema.parse(feedbackId), z.boolean().parse(resolved));
   refresh();
+}
+
+// ── Portfolio ──
+
+export async function savePieceAction(id: string | null, input: PieceInput): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  const result = await savePiece(user.id, id === null ? null : idSchema.parse(id), input);
+  if (result.ok) refresh();
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
+}
+
+export async function deletePieceAction(id: string): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  const ok = await deletePiece(user.id, idSchema.parse(id));
+  refresh();
+  return { ok };
+}
+
+export async function addFromMissionAction(missionCode: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  const result = await addFromMission(user.id, z.string().min(1).max(64).parse(missionCode));
+  if (result.ok) refresh();
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
+}
+
+export async function saveCapstoneAction(input: CapstoneInput): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  const result = await saveCapstone(user.id, input);
+  if (result.ok) refresh();
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
+}
+
+export async function moveCapstoneAction(delta: 1 | -1): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  const ok = await moveCapstoneStage(user.id, z.union([z.literal(1), z.literal(-1)]).parse(delta));
+  refresh();
+  return { ok };
 }

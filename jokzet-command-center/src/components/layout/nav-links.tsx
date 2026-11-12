@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BellRing, ClipboardCheck, Gauge, Images, Layers, LayoutGrid, ListChecks, Settings } from "lucide-react";
+import { BarChart3, BellRing, ClipboardCheck, Gauge, Images, Layers, LayoutGrid, ListChecks, Settings } from "lucide-react";
 
 // Navigation structure and order are unchanged from the Base44 export (src/components/Layout.jsx).
 const NAV = [
@@ -14,6 +14,8 @@ const NAV = [
   { to: "/assessments", label: "Assessments", icon: ClipboardCheck, end: false },
   { to: "/portfolio", label: "Portfolio", icon: Layers, end: false },
   { to: "/reminders", label: "Reminders", icon: BellRing, end: false },
+  // Added in Phase 8 (analytics); placement needs the user's approval, see docs/PHASE_8_ANALYTICS_PORTFOLIO.md.
+  { to: "/analytics", label: "Analytics", icon: BarChart3, end: false },
   // Added at the user's request (schedule import + reminder settings); everything above is the Base44 order.
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ] as const;

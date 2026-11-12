@@ -598,23 +598,25 @@ model Notification {
 // ─────────────── Portfolio and capstone ───────────────
 
 model PortfolioProject {
-  id           String        @id @default(cuid())
-  userId       String
-  departmentId String?
-  missionId    String?
-  title        String
-  summary      String?
-  status       ProjectStatus @default(IN_PROGRESS)
-  tools        String[]
-  repoUrl      String?
-  liveUrl      String?
-  completedAt  DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  userId          String
+  departmentId    String?
+  missionId       String?
+  title           String
+  summary         String?
+  status          ProjectStatus @default(IN_PROGRESS)
+  tools           String[]
+  repoUrl         String?
+  coverEvidenceId String? // an image from the user's evidence vault
+  liveUrl         String?
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  mission    Mission?    @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department    Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  mission       Mission?      @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  coverEvidence EvidenceItem? @relation("PortfolioCover", fields: [coverEvidenceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
 }
@@ -624,6 +626,7 @@ model CapstoneProject {
   userId    String
   name      String        @default("BusinessOS Ghana")
   summary   String?
+  tools     String[]
   status    ProjectStatus @default(PLANNED)
   repoUrl   String?
   liveUrl   String?
@@ -811,11 +814,12 @@ model EvidenceItem {
   fileId       String?        @unique
   createdAt    DateTime       @default(now())
 
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  department Department      @relation(fields: [departmentId], references: [id])
-  mission    Mission?        @relation(fields: [missionId], references: [id], onDelete: SetNull)
-  submission Submission?     @relation(fields: [submissionId], references: [id], onDelete: SetNull)
-  file       SubmissionFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department      Department         @relation(fields: [departmentId], references: [id])
+  mission         Mission?           @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  submission      Submission?        @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  file            SubmissionFile?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  portfolioCovers PortfolioProject[] @relation("PortfolioCover")
 
   @@index([userId, capturedDate])
   @@index([userId, departmentId])
