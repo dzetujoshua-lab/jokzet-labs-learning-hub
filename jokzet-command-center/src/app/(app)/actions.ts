@@ -14,6 +14,10 @@ import { setDailyStatus, USER_SETTABLE } from "@/lib/schedule/daily";
 import { confirmImport, previewImport, type ImportPreview, type ImportResult } from "@/lib/schedule/importer";
 import { MAX_IMPORT_BYTES } from "@/lib/schedule/constants";
 import { addFromMission, deletePiece, moveCapstoneStage, saveCapstone, savePiece, type CapstoneInput, type PieceInput } from "@/lib/portfolio/service";
+import {
+  adjustStock, createSale, deleteContact, deleteExpense, deleteProduct, recordPayment, restock, saveContact, saveExpense, saveProduct, voidSale,
+  type ContactInput, type ExpenseInput, type ProductInput, type RestockInput, type SaleInput,
+} from "@/lib/businessos/service";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -222,4 +226,58 @@ export async function moveCapstoneAction(delta: 1 | -1): Promise<{ ok: boolean }
   const ok = await moveCapstoneStage(user.id, z.union([z.literal(1), z.literal(-1)]).parse(delta));
   refresh();
   return { ok };
+}
+
+// ── BusinessOS Ghana (capstone workspace) ──
+
+type Done = { ok: boolean; error?: string };
+const done = (r: { ok: boolean; error?: string }): Done => {
+  if (r.ok) refresh();
+  return r.ok ? { ok: true } : { ok: false, error: (r as { error: string }).error };
+};
+const kindSchema = z.enum(["customer", "supplier"]);
+
+export async function saveContactAction(kind: "customer" | "supplier", recordId: string | null, input: ContactInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveContact(user.id, kindSchema.parse(kind), recordId === null ? null : idSchema.parse(recordId), input));
+}
+export async function deleteContactAction(kind: "customer" | "supplier", recordId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteContact(user.id, kindSchema.parse(kind), idSchema.parse(recordId)), error: "Not found." });
+}
+export async function saveProductAction(productId: string | null, input: ProductInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveProduct(user.id, productId === null ? null : idSchema.parse(productId), input));
+}
+export async function deleteProductAction(productId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteProduct(user.id, idSchema.parse(productId)), error: "Not found." });
+}
+export async function restockAction(productId: string, input: RestockInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await restock(user.id, idSchema.parse(productId), input));
+}
+export async function adjustStockAction(productId: string, delta: number, note: string): Promise<Done> {
+  const user = await requireUser();
+  return done(await adjustStock(user.id, idSchema.parse(productId), z.number().int().parse(delta), z.string().max(200).parse(note)));
+}
+export async function createSaleAction(input: SaleInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await createSale(user.id, input));
+}
+export async function recordPaymentAction(saleId: string, amount: string): Promise<Done> {
+  const user = await requireUser();
+  return done(await recordPayment(user.id, idSchema.parse(saleId), z.string().max(30).parse(amount)));
+}
+export async function voidSaleAction(saleId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await voidSale(user.id, idSchema.parse(saleId)), error: "Not found." });
+}
+export async function saveExpenseAction(expenseId: string | null, input: ExpenseInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveExpense(user.id, expenseId === null ? null : idSchema.parse(expenseId), input));
+}
+export async function deleteExpenseAction(expenseId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteExpense(user.id, idSchema.parse(expenseId)), error: "Not found." });
 }

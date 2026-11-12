@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, ExternalLink, GitBranch, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -228,6 +229,12 @@ export function PortfolioView({
                   {capstone.summary ? <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">{capstone.summary}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/capstone"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-primary transition-colors hover:bg-primary/20"
+                  >
+                    <Layers className="h-3 w-3" /> workspace
+                  </Link>
                   {capstone.liveUrl ? <Pill href={capstone.liveUrl} icon={ExternalLink} label="Open the live capstone">open</Pill> : null}
                   {capstone.repoUrl ? <Pill href={capstone.repoUrl} icon={GitBranch} label="Open the capstone repository">repo</Pill> : null}
                   <button

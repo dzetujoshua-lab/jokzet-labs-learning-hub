@@ -182,6 +182,11 @@ model User {
   reminderSettings   ReminderSettings?
   pushSubscriptions  PushSubscription[]
   evidenceItems      EvidenceItem[]
+  bosCustomers       BosCustomer[]
+  bosSuppliers       BosSupplier[]
+  bosProducts        BosProduct[]
+  bosSales           BosSale[]
+  bosExpenses        BosExpense[]
 }
 
 model Session {
@@ -824,4 +829,144 @@ model EvidenceItem {
   @@index([userId, capturedDate])
   @@index([userId, departmentId])
   @@index([submissionId])
+}
+
+// ─────────────── BusinessOS Ghana (capstone practice workspace) ───────────────
+// A learner-owned mini business system. Every row belongs to one user; money is whole pesewas (GHS x 100).
+
+enum BosPayment {
+  CASH
+  MOMO
+  BANK
+  CREDIT // sold on credit: amountPaid < total until payments are recorded
+}
+
+enum BosStockReason {
+  OPENING
+  RESTOCK
+  SALE
+  ADJUSTMENT
+}
+
+model BosCustomer {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  phone     String?
+  email     String?
+  location  String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales BosSale[]
+
+  @@index([userId])
+}
+
+model BosSupplier {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  phone     String?
+  email     String?
+  location  String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products  BosProduct[]
+  expenses  BosExpense[]
+  movements BosStockMovement[]
+
+  @@index([userId])
+}
+
+model BosProduct {
+  id           String   @id @default(cuid())
+  userId       String
+  supplierId   String?
+  name         String
+  sku          String?
+  unit         String   @default("pc")
+  costPesewas  Int // what one unit costs the business
+  pricePesewas Int // what one unit sells for
+  stockQty     Int      @default(0) // maintained only by stock movements, never below 0
+  reorderLevel Int      @default(5)
+  archived     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier  BosSupplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items     BosSaleItem[]
+  movements BosStockMovement[]
+
+  @@unique([userId, sku])
+  @@index([userId])
+}
+
+model BosSale {
+  id           String     @id @default(cuid())
+  userId       String
+  customerId   String?
+  date         DateTime   @db.Date
+  payment      BosPayment @default(CASH)
+  totalPesewas Int
+  paidPesewas  Int
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer BosCustomer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    BosSaleItem[]
+
+  @@index([userId, date])
+}
+
+model BosSaleItem {
+  id               String  @id @default(cuid())
+  saleId           String
+  productId        String?
+  productName      String // snapshot, survives product edits
+  qty              Int
+  unitPricePesewas Int // snapshot at the time of sale
+  unitCostPesewas  Int // snapshot, used for profit
+
+  sale    BosSale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product BosProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model BosStockMovement {
+  id         String         @id @default(cuid())
+  productId  String
+  supplierId String?
+  delta      Int // + in, - out
+  reason     BosStockReason
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  product  BosProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier BosSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+}
+
+model BosExpense {
+  id            String     @id @default(cuid())
+  userId        String
+  supplierId    String?
+  category      String
+  description   String?
+  date          DateTime   @db.Date
+  amountPesewas Int
+  payment       BosPayment @default(CASH)
+  createdAt     DateTime   @default(now())
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier BosSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([userId, date])
 }
