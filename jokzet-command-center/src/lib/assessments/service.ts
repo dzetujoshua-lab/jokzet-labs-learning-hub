@@ -78,8 +78,17 @@ export async function assessSubmission(userId: string, submissionId: string, inp
     const assessment = await tx.assessment.create({
       data: {
         userId, submissionId, rubricId: rubric.id, assessorId: null, totalPoints, maxPoints, percentage, outcome,
+        // Today every assessment is the learner's own: it keeps today's behaviour but is recorded as self-assessed, so it
+        // can never be mistaken for a reviewed (verified) result. The rubric version and criterion snapshots freeze what
+        // these scores meant even if the curriculum is edited later.
+        assessorKind: "SELF", status: "SELF_RECORDED", rubricVersion: rubric.version,
         weaknesses: weak.map((s) => byId.get(s.criterionId)!.name), assessedAt: now,
-        scores: { create: scores.map((s) => ({ criterionId: s.criterionId, points: s.points, comment: s.comment || null })) },
+        scores: {
+          create: scores.map((s) => {
+            const criterion = byId.get(s.criterionId)!;
+            return { criterionId: s.criterionId, points: s.points, comment: s.comment || null, criterionName: criterion.name, maxPoints: criterion.maxPoints };
+          }),
+        },
       },
     });
 
@@ -106,7 +115,7 @@ export async function assessSubmission(userId: string, submissionId: string, inp
       }
       await tx.evidenceItem.updateMany({ where: { submissionId }, data: { status: "VERIFIED" } });
       if (mission.skills.length) {
-        await tx.userSkill.createMany({ data: mission.skills.map((s) => ({ userId, skillId: s.skillId, earnedAt: now })), skipDuplicates: true });
+        await tx.userSkill.createMany({ data: mission.skills.map((s) => ({ userId, skillId: s.skillId, earnedAt: now, tier: "SELF_ASSESSED" as const })), skipDuplicates: true });
       }
     } else {
       await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "NEEDS_REVISION" } });
