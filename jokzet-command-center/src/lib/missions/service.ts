@@ -19,6 +19,7 @@ export type MissionView = {
   status: "planned" | "active" | "done" | "skipped";
   xpReward: number;
   custom: boolean;
+  category: "CURRICULUM_MISSION" | "PERSONAL_ACTIVITY" | "RECOMMENDED_CHALLENGE";
 };
 
 export type DepartmentView = {
@@ -58,6 +59,7 @@ function toView(lm: LearnerMissionWithMission): MissionView {
     status: statusToView(lm.status),
     xpReward: lm.mission.xpReward,
     custom: lm.mission.createdById !== null,
+    category: lm.mission.category,
   };
 }
 
@@ -156,6 +158,8 @@ export async function createCustomMission(userId: string, input: CreateMissionIn
       data: {
         departmentId: department.id,
         createdById: userId,
+        category: "PERSONAL_ACTIVITY", // a board task the learner made (no rubric, never credit-bearing beyond the legacy checkbox)
+        origin: "LEARNER_CREATED",
         title: data.title,
         durationMinutes: data.minutes,
         kind: toEnum(data.kind) as never,

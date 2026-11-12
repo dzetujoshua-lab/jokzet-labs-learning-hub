@@ -20,6 +20,9 @@ import {
   type ContactInput, type ExpenseInput, type ProductInput, type RestockInput, type SaleInput,
 } from "@/lib/businessos/service";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
+import {
+  acceptRecommendation, attachRubricTemplate, createPersonalActivity, dismissRecommendation, startActivity, type ActivityInput,
+} from "@/lib/activities/service";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -286,4 +289,46 @@ export async function saveExpenseAction(expenseId: string | null, input: Expense
 export async function deleteExpenseAction(expenseId: string): Promise<Done> {
   const user = await requireUser();
   return done({ ok: await deleteExpense(user.id, idSchema.parse(expenseId)), error: "Not found." });
+}
+
+// ── Personal activities and recommended challenges ──
+
+export async function createPersonalActivityAction(input: ActivityInput): Promise<Done & { id?: string }> {
+  const user = await requireUser();
+  const result = await createPersonalActivity(user.id, input);
+  if (result.ok) refresh();
+  return result.ok ? { ok: true, id: result.id } : { ok: false, error: result.error };
+}
+
+export async function startActivityAction(learnerMissionId: string): Promise<Done> {
+  const user = await requireUser();
+  const ok = await startActivity(user.id, idSchema.parse(learnerMissionId));
+  refresh();
+  return ok ? { ok: true } : { ok: false, error: "This activity can't be started." };
+}
+
+export async function attachRubricTemplateAction(learnerMissionId: string, templateKey: string): Promise<Done> {
+  const user = await requireUser();
+  return done(await attachRubricTemplate(user.id, idSchema.parse(learnerMissionId), z.string().max(40).parse(templateKey)));
+}
+
+export async function deleteActivityAction(learnerMissionId: string): Promise<Done> {
+  const user = await requireUser();
+  const ok = await deleteMission(user.id, idSchema.parse(learnerMissionId)); // refuses anything with submissions
+  refresh();
+  return ok ? { ok: true } : { ok: false, error: "This activity can't be deleted because it has submitted work." };
+}
+
+export async function acceptRecommendationAction(recommendationId: string): Promise<Done & { id?: string }> {
+  const user = await requireUser();
+  const result = await acceptRecommendation(user.id, idSchema.parse(recommendationId));
+  if (result.ok) refresh();
+  return result.ok ? { ok: true, id: result.id } : { ok: false, error: result.error };
+}
+
+export async function dismissRecommendationAction(recommendationId: string): Promise<Done> {
+  const user = await requireUser();
+  const ok = await dismissRecommendation(user.id, idSchema.parse(recommendationId));
+  refresh();
+  return ok ? { ok: true } : { ok: false, error: "This challenge is no longer available." };
 }

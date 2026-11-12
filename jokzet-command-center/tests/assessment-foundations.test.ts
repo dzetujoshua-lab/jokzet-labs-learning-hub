@@ -168,7 +168,7 @@ describe("the seed is non-destructive and versions rubrics", () => {
   it("never deletes or overwrites a resource: a placeholder is created only for a mission that has none", async () => {
     const dept = await db.department.findUniqueOrThrow({ where: { code: "fswd" } });
     const mission = await db.mission.create({
-      data: { code: "ZZZ-L0-95", departmentId: dept.id, createdById: userId, title: "Resource test", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r" },
+      data: { code: "ZZZ-L0-95", departmentId: dept.id, createdById: userId, category: "PERSONAL_ACTIVITY", origin: "LEARNER_CREATED", title: "Resource test", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r" },
     });
     expect(await ensurePlaceholderResource(db, mission.id)).toBe(true);
     const resource = await db.resource.findFirstOrThrow({ where: { missionId: mission.id } });
@@ -185,7 +185,7 @@ describe("the seed is non-destructive and versions rubrics", () => {
   it("archives missions that left the curriculum files instead of deleting them", async () => {
     const dept = await db.department.findUniqueOrThrow({ where: { code: "fswd" } });
     await db.mission.create({
-      data: { code: "ZZZ-L0-99", departmentId: dept.id, createdById: userId, title: "Retired", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r", status: "PUBLISHED", isPublished: true },
+      data: { code: "ZZZ-L0-99", departmentId: dept.id, createdById: userId, category: "PERSONAL_ACTIVITY", origin: "LEARNER_CREATED", title: "Retired", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r", status: "PUBLISHED", isPublished: true },
     });
     const scope = { code: { in: ["ZZZ-L0-99", "ZZZ-L0-95"] } };
     expect(await archiveRetired(db, ["ZZZ-L0-95"], scope)).toBe(1); // only the one that is no longer listed
@@ -203,7 +203,7 @@ describe("the seed is non-destructive and versions rubrics", () => {
   it("bumps the rubric version on a change while earlier scores keep their wording, and does nothing when nothing changed", async () => {
     const dept = await db.department.findUniqueOrThrow({ where: { code: "fswd" } });
     const mission = await db.mission.create({
-      data: { code: "ZZZ-L0-96", departmentId: dept.id, createdById: userId, title: "Rubric test", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r" },
+      data: { code: "ZZZ-L0-96", departmentId: dept.id, createdById: userId, category: "PERSONAL_ACTIVITY", origin: "LEARNER_CREATED", title: "Rubric test", objective: "o", durationMinutes: 30, requiredTools: [], experimentChallenge: "e", submissionRequirements: "s", remediation: "r" },
     });
     expect(await syncRubric(db, mission.id, mission.code!, spec())).toBe(false); // created at version 1
     expect(await syncRubric(db, mission.id, mission.code!, spec())).toBe(false); // identical: no bump

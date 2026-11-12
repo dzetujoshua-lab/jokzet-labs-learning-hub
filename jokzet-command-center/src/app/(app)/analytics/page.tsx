@@ -116,6 +116,26 @@ export default async function AnalyticsPage() {
         </section>
       </div>
 
+      {a.practice.personal.completed + a.practice.challenges.completed > 0 ? (
+        <section className="panel p-5" aria-labelledby="practice-heading">
+          <p id="practice-heading" className="mono-label">Practice · personal activities and challenges</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">Your own self-directed work. It is shown here and is not added to the programme figures above.</p>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            {[
+              { label: "Personal activities", t: a.practice.personal },
+              { label: "Recommended challenges", t: a.practice.challenges },
+            ].map(({ label, t }) => (
+              <div key={label} className="rounded-2xl border border-border bg-card px-4 py-3">
+                <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">{label}</dt>
+                <dd className="mt-2 text-sm text-foreground tabular-nums">
+                  {t.completed} finished · {t.assessed} passed · {fmtHours(t.minutes)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
       <ReportTable title="Weekly report" firstColumn="Week of" rows={a.weekly} />
       <ReportTable title="Monthly report" firstColumn="Month" rows={a.monthly} />
 

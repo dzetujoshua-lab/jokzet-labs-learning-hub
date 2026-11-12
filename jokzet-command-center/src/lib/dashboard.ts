@@ -15,7 +15,7 @@ export async function getDashboardData(userId: string) {
     listDepartments(userId),
     listMissions(userId),
     db.evidenceItem.count({ where: { userId } }),
-    db.assessment.count({ where: { userId, outcome: "PASS" } }),
+    db.assessment.count({ where: { userId, outcome: "PASS", rubric: { mission: { category: "CURRICULUM_MISSION" } } } }), // curriculum only: practice activities are listed separately
     db.reminder.findMany({ where: { userId, status: "SCHEDULED" }, orderBy: { remindAt: "asc" }, take: 20 }),
     db.capstoneProject.findFirst({
       where: { userId },

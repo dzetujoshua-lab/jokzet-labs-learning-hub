@@ -108,13 +108,17 @@ export async function assessSubmission(userId: string, submissionId: string, inp
     let xpAwarded = 0;
     if (outcome === "PASS") {
       await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "PASSED", completedAt: now, startedAt: lm.startedAt ?? now } });
-      if (lm.xpAwarded === 0) {
+      // Only curriculum missions earn XP and skills. A personal activity or recommended challenge is practice the learner
+      // chose to do: it is assessed and recorded (and can be shown in the portfolio), but it never earns XP, never earns
+      // curriculum skills and never stands in for a mandatory mission.
+      const earnsCredit = mission.category === "CURRICULUM_MISSION";
+      if (earnsCredit && lm.xpAwarded === 0) {
         xpAwarded = mission.xpReward;
         await tx.learnerMission.update({ where: { id: lm.id }, data: { xpAwarded } });
         await adjustDepartmentXp(tx, userId, mission.departmentId, xpAwarded); // idempotent: only when nothing was awarded yet
       }
       await tx.evidenceItem.updateMany({ where: { submissionId }, data: { status: "VERIFIED" } });
-      if (mission.skills.length) {
+      if (earnsCredit && mission.skills.length) {
         await tx.userSkill.createMany({ data: mission.skills.map((s) => ({ userId, skillId: s.skillId, earnedAt: now, tier: "SELF_ASSESSED" as const })), skipDuplicates: true });
       }
     } else {

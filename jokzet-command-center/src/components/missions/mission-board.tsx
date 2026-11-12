@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ListChecks, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { MissionRow } from "@/components/dashboard/mission-row";
@@ -41,6 +42,12 @@ export function MissionBoard({
         title="Mission board"
         description="Small, finishable actions across the nine departments. Every mission names the evidence it should leave behind."
       >
+        <Link
+          href="/activities"
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-primary"
+        >
+          Personal activities →
+        </Link>
         <Button onClick={() => setFormOpen(true)} className="gap-1.5">
           <Plus className="h-4 w-4" /> New mission
         </Button>
