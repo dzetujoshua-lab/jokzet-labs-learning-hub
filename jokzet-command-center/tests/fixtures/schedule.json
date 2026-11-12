@@ -1,0 +1,331 @@
+{
+  "schemaVersion": "1.0",
+  "package": {
+    "id": "jokzet-labs-learning-programme",
+    "name": "JOKZET Labs Daily Learning Programme",
+    "description": "Weekly recurring practical learning missions and due-time reminders.",
+    "brand": "JOKZET Labs",
+    "tagline": "Build Beyond Possible."
+  },
+  "schedule": {
+    "startDate": "2026-11-16",
+    "timezone": "Africa/Accra",
+    "defaultStartTime": "12:00",
+    "defaultDurationMinutes": 60,
+    "recurrence": "weekly",
+    "notification": {
+      "enabled": true,
+      "trigger": "at_start",
+      "minutesBefore": 0,
+      "channels": [
+        "in_app",
+        "browser"
+      ],
+      "permissionRequired": true,
+      "fallback": "Show an in-app reminder the next time the user opens the app if browser notifications are unavailable."
+    }
+  },
+  "learningMethod": [
+    "WATCH",
+    "DO",
+    "EXPERIMENT",
+    "SHOW",
+    "GET_ASSESSED"
+  ],
+  "rules": {
+    "noReadingHeavyAssignments": true,
+    "preferVideoDemonstrationsAndHandsOnTasks": true,
+    "assessmentRequiresSubmittedEvidence": true,
+    "cybersecurity": "Only use systems owned by the learner, explicitly authorized targets, or intentionally vulnerable training labs.",
+    "privacy": "Never request or store passwords, API keys, tokens, or private keys as mission evidence."
+  },
+  "weeklyMissions": [
+    {
+      "id": "monday-fullstack",
+      "dayOfWeek": "MO",
+      "title": "Full-stack Development",
+      "department": "Full-stack Development",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Build and improve practical frontend, backend, database, and application development skills.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Follow a short video demonstration relevant to today's development skill."
+        },
+        {
+          "stage": "DO",
+          "task": "Complete the guided coding task and make the feature work."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Extend the solution, change an assumption, or test an edge case."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit code, screenshots, a Git commit, repository link, or working demo."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Review the submitted evidence against the mission acceptance criteria."
+        }
+      ],
+      "evidenceTypes": [
+        "code",
+        "screenshot",
+        "github_url",
+        "live_demo_url",
+        "video"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: Full-stack Development"
+    },
+    {
+      "id": "tuesday-uiux",
+      "dayOfWeek": "TU",
+      "title": "UI/UX Design",
+      "department": "UI/UX Design",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Develop practical interface design, prototyping, usability, and design-system skills.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Watch a visual design demonstration."
+        },
+        {
+          "stage": "DO",
+          "task": "Create or improve a practical interface in Figma or another design tool."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Try an alternative layout, interaction, or responsive state."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit screenshots, a prototype link, and a short design rationale."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Evaluate the submitted work against usability and visual-quality criteria."
+        }
+      ],
+      "evidenceTypes": [
+        "image",
+        "figma_url",
+        "video",
+        "written_explanation"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: UI/UX Design"
+    },
+    {
+      "id": "wednesday-cybersecurity",
+      "dayOfWeek": "WE",
+      "title": "Ethical Hacking and Cybersecurity",
+      "department": "Ethical Hacking and Cybersecurity",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Build defensive security knowledge and practical testing skills in authorized environments.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Watch a practical security demonstration."
+        },
+        {
+          "stage": "DO",
+          "task": "Complete the assigned exercise in an owned system or authorized training lab."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Test a safe variation within the authorized environment."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit screenshots, commands, findings, and remediation notes with secrets removed."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Evaluate the evidence for correctness, authorization, impact awareness, and remediation."
+        }
+      ],
+      "evidenceTypes": [
+        "screenshot",
+        "text",
+        "video",
+        "lab_report"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: Ethical Hacking and Cybersecurity"
+    },
+    {
+      "id": "thursday-cloud-servers",
+      "dayOfWeek": "TH",
+      "title": "Cloud Computing and Server Administration",
+      "department": "Cloud Computing and Server Administration",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Develop practical skills in cloud infrastructure, Linux, networking, deployment, and server operations.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Watch a practical setup, administration, or troubleshooting demonstration."
+        },
+        {
+          "stage": "DO",
+          "task": "Configure, deploy, or administer the assigned service or system."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Test a configuration change, monitoring check, or recovery procedure."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit terminal output, screenshots, sanitized configuration, and results."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Evaluate correctness, reliability, security, and troubleshooting process."
+        }
+      ],
+      "evidenceTypes": [
+        "screenshot",
+        "terminal_output",
+        "configuration_file",
+        "video"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: Cloud and Server Administration"
+    },
+    {
+      "id": "friday-ai-business",
+      "dayOfWeek": "FR",
+      "title": "AI, Automation, Business and Career",
+      "department": "AI Engineering and Automation",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Build useful AI and automation workflows and connect technical skills to business and career outcomes.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Watch a practical AI, automation, business, or career demonstration."
+        },
+        {
+          "stage": "DO",
+          "task": "Build a small working workflow, prototype, or business deliverable."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Improve the workflow and test edge cases or failure conditions."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit a demo, screenshots, workflow export, or project link."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Evaluate usefulness, reliability, quality, and measurable outcome."
+        }
+      ],
+      "evidenceTypes": [
+        "video",
+        "screenshot",
+        "workflow_export",
+        "github_url",
+        "live_demo_url"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: AI, Automation and Business"
+    },
+    {
+      "id": "saturday-photo-video",
+      "dayOfWeek": "SA",
+      "title": "Photography and Video Production",
+      "department": "Photography and Video Editing",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Build practical visual storytelling, smartphone photography, filming, lighting, and editing skills.",
+      "agenda": [
+        {
+          "stage": "WATCH",
+          "task": "Watch a visual demonstration of composition, lighting, filming, or editing."
+        },
+        {
+          "stage": "DO",
+          "task": "Capture and edit the assigned photo or video exercise using available equipment."
+        },
+        {
+          "stage": "EXPERIMENT",
+          "task": "Try a different shot, lighting setup, edit, or storytelling technique."
+        },
+        {
+          "stage": "SHOW",
+          "task": "Submit original captures and the final edited output."
+        },
+        {
+          "stage": "GET_ASSESSED",
+          "task": "Evaluate composition, exposure, sound, editing, storytelling, and technical quality as applicable."
+        }
+      ],
+      "evidenceTypes": [
+        "image",
+        "video",
+        "project_file",
+        "written_explanation"
+      ],
+      "notificationTitle": "Today's JOKZET Labs mission: Photography and Video"
+    },
+    {
+      "id": "sunday-review",
+      "dayOfWeek": "SU",
+      "title": "Weekly Review, Assessment and Portfolio",
+      "department": "Business and Career Development",
+      "startTime": "12:00",
+      "durationMinutes": 60,
+      "objective": "Review actual work completed, assess submitted evidence, correct weaknesses, and plan the next week.",
+      "agenda": [
+        {
+          "stage": "REVIEW",
+          "task": "Review the week's attempted and completed missions."
+        },
+        {
+          "stage": "SUBMIT",
+          "task": "Submit missing evidence for work that was completed."
+        },
+        {
+          "stage": "ASSESS",
+          "task": "Assess only evidence actually submitted against the relevant acceptance criteria."
+        },
+        {
+          "stage": "REMEDIATE",
+          "task": "Record failed criteria and complete corrections or remediation tasks."
+        },
+        {
+          "stage": "PORTFOLIO",
+          "task": "Select portfolio-worthy work and update project records."
+        },
+        {
+          "stage": "PLAN",
+          "task": "Set priorities for the next week's missions."
+        }
+      ],
+      "evidenceTypes": [
+        "weekly_summary",
+        "project_link",
+        "screenshot",
+        "video"
+      ],
+      "notificationTitle": "JOKZET Labs weekly review and assessment"
+    }
+  ],
+  "importInstructions": {
+    "expectedBehavior": [
+      "Validate the schema version and required fields before importing.",
+      "Show a preview of all seven recurring weekly missions before confirmation.",
+      "Create or update schedule templates without duplicating existing missions.",
+      "Preserve the user's existing app theme and layout.",
+      "Create daily mission instances from the weekly templates beginning on the configured start date.",
+      "Schedule reminders in the Africa/Accra timezone.",
+      "Ask for browser notification permission only after an explicit user action.",
+      "Show an in-app due reminder even if browser notification permission is denied.",
+      "Record notification delivery attempts and mission completion status.",
+      "Allow the user to edit reminder time, duration, and notification preferences."
+    ],
+    "important": "Importing this file defines the schedule and reminder settings. Actual notifications require the application to implement a reminder scheduler and notification delivery."
+  }
+}

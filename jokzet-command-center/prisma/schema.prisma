@@ -1,0 +1,823 @@
+// JOKZET Labs Learning Command Center: normalised schema (PostgreSQL).
+// Ownership rule: every learner-owned row carries userId and every query MUST filter by it.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────── Enums ───────────────
+
+enum UserRole {
+  LEARNER
+  ADMIN
+}
+
+enum MissionPhase {
+  WATCH
+  DO
+  EXPERIMENT
+  SHOW
+}
+
+enum ResourceType {
+  VIDEO
+  DEMONSTRATION
+  INTERACTIVE_LAB
+  TOOL
+  REFERENCE
+}
+
+enum LearnerMissionStatus {
+  NOT_STARTED // Base44: planned
+  IN_PROGRESS // Base44: active
+  SUBMITTED
+  NEEDS_REVISION
+  COMPLETED // marked done by the learner (Base44: done)
+  PASSED // assessment passed
+  SKIPPED
+}
+
+enum DailyMissionStatus {
+  SCHEDULED
+  STARTED
+  AWAITING_ASSESSMENT
+  COMPLETED
+  MISSED
+  SKIPPED
+}
+
+enum NotificationKind {
+  DUE
+  ADVANCE
+  TEST
+  MISSED
+}
+
+enum DeliveryChannel {
+  IN_APP
+  BROWSER
+  PUSH
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+enum EvidenceStatus {
+  LOGGED
+  VERIFIED // set when an assessment that used it passed
+}
+
+enum MissionKind {
+  BUILD
+  DESIGN
+  DRILL
+  STUDY
+  SHOOT
+  EDIT
+  WRITE
+  SHIP
+}
+
+enum EvidenceType {
+  SCREENSHOT
+  PHOTO
+  VIDEO
+  CODE
+  DOCUMENT
+  LINK
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  ASSESSED
+}
+
+enum FileKind {
+  IMAGE
+  SCREENSHOT
+  VIDEO
+  PDF
+  CODE
+}
+
+enum AssessmentOutcome {
+  PASS
+  REVISE
+  FAIL
+}
+
+enum FeedbackKind {
+  GENERAL
+  CORRECTION
+  REMEDIATION
+}
+
+enum ReminderRepeat {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  SENT
+  DISMISSED
+}
+
+enum ProjectStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+// ─────────────── Identity ───────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(LEARNER)
+  isActive     Boolean   @default(true)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profile            Profile?
+  sessions           Session[]
+  departmentProgress LearnerDepartment[]
+  learnerMissions    LearnerMission[]
+  submissions        Submission[]
+  submissionFiles    SubmissionFile[]
+  assessments        Assessment[]              @relation("AssessmentLearner")
+  assessed           Assessment[]              @relation("AssessmentAssessor")
+  feedback           Feedback[]
+  skills             UserSkill[]
+  achievements       UserAchievement[]
+  activity           ActivityRecord[]
+  reminders          Reminder[]
+  notifications      Notification[]
+  portfolioProjects  PortfolioProject[]
+  capstones          CapstoneProject[]
+  customMissions     Mission[]                 @relation("CustomMissions")
+  scheduleConfigs    ScheduleConfig[]
+  dailyMissions      DailyMissionInstance[]
+  completionRecords  MissionCompletionRecord[]
+  reminderSettings   ReminderSettings?
+  pushSubscriptions  PushSubscription[]
+  evidenceItems      EvidenceItem[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique // SHA-256 of the cookie token; the raw token is never stored
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  displayName    String
+  timezone       String   @default("Africa/Accra")
+  reminderTime   String   @default("12:00") // HH:mm in the profile timezone
+  programmeStart DateTime @default("2026-11-16T00:00:00.000Z") @db.Date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────── Curriculum (shared, seeded) ───────────────
+
+model Department {
+  id        String  @id @default(cuid())
+  code      String  @unique // stable: fswd, uxui, sec, cloud, sysadmin, ai, photo, video, biz
+  name      String
+  summary   String?
+  icon      String
+  color     String
+  sortOrder Int
+
+  learningPaths LearningPath[]
+  skills        Skill[]
+  missions      Mission[]
+  progress      LearnerDepartment[]
+  portfolio     PortfolioProject[]
+  milestones    CapstoneMilestone[]
+  evidence      EvidenceItem[]
+}
+
+model LearningPath {
+  id           String  @id @default(cuid())
+  departmentId String
+  title        String
+  description  String?
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  levels     Level[]
+
+  @@unique([departmentId, title])
+}
+
+model Level {
+  id             String  @id @default(cuid())
+  learningPathId String
+  number         Int // 0-based. Every learner starts at 0.
+  title          String
+  description    String?
+  milestone      String? // the practical proof required to complete the level
+
+  learningPath LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
+  missions     Mission[]
+  skills       Skill[]
+
+  @@unique([learningPathId, number])
+}
+
+model Skill {
+  id           String  @id @default(cuid())
+  departmentId String
+  levelId      String?
+  name         String
+  description  String?
+
+  department Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  level      Level?         @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  learners   UserSkill[]
+  missions   MissionSkill[]
+
+  @@unique([departmentId, name])
+  @@index([levelId])
+}
+
+model Mission {
+  id                     String       @id @default(cuid())
+  code                   String?      @unique // curriculum missions only, e.g. FSWD-L0-01
+  departmentId           String
+  levelId                String? // null for learner-created missions
+  createdById            String? // null = curriculum mission; set = learner-created (Base44 "New mission")
+  title                  String
+  objective              String? // curriculum missions must have the fields below; enforced by the seed validator
+  durationMinutes        Int          @default(45)
+  kind                   MissionKind  @default(BUILD)
+  evidenceType           EvidenceType @default(SCREENSHOT)
+  xpReward               Int          @default(25)
+  requiredTools          String[]
+  experimentChallenge    String?
+  submissionRequirements String?
+  remediation            String?
+  notes                  String?
+  weekday                Int? // 0 = Sunday … 6 = Saturday, informs the weekly schedule
+  sortOrder              Int          @default(0)
+  isPublished            Boolean      @default(false)
+
+  department      Department         @relation(fields: [departmentId], references: [id])
+  level           Level?             @relation(fields: [levelId], references: [id])
+  createdBy       User?              @relation("CustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
+  steps           MissionStep[]
+  resources       Resource[]
+  rubric          AssessmentRubric?
+  skills          MissionSkill[]
+  learnerMissions LearnerMission[]
+  reminders       Reminder[]
+  portfolio       PortfolioProject[]
+  evidence        EvidenceItem[]
+
+  @@index([departmentId, levelId, sortOrder])
+  @@index([createdById])
+}
+
+model MissionSkill {
+  missionId String
+  skillId   String
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([missionId, skillId])
+}
+
+model MissionStep {
+  id           String       @id @default(cuid())
+  missionId    String
+  phase        MissionPhase
+  position     Int
+  title        String
+  instructions String
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, position])
+}
+
+model Resource {
+  id        String       @id @default(cuid())
+  missionId String
+  title     String
+  type      ResourceType
+  url       String? // null until a real, verified link is supplied. Never invent URLs.
+  notes     String?
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@index([missionId])
+}
+
+model AssessmentRubric {
+  id           String @id @default(cuid())
+  missionId    String @unique
+  passingScore Int // percentage 0–100
+
+  mission     Mission           @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  criteria    RubricCriterion[]
+  assessments Assessment[]
+}
+
+model RubricCriterion {
+  id          String @id @default(cuid())
+  rubricId    String
+  position    Int
+  name        String
+  description String
+  maxPoints   Int
+
+  rubric AssessmentRubric  @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  scores AssessmentScore[]
+
+  @@unique([rubricId, position])
+}
+
+// ─────────────── Learner progress ───────────────
+
+model LearnerDepartment {
+  id            String  @id @default(cuid())
+  userId        String
+  departmentId  String
+  level         Int     @default(0)
+  xp            Int     @default(0) // maintained server-side only, in the same transaction as the status change
+  nextMilestone String? // learner-editable (Base44 "Next milestone"); falls back to the level milestone
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+}
+
+model LearnerMission {
+  id             String               @id @default(cuid())
+  userId         String
+  missionId      String
+  status         LearnerMissionStatus @default(NOT_STARTED)
+  scheduledFor   DateTime?            @db.Date
+  completedSteps String[] // MissionStep ids ticked off (saved progress)
+  notes          String?
+  minutesSpent   Int                  @default(0)
+  xpAwarded      Int                  @default(0) // XP currently credited for this mission; makes award/revoke idempotent
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission     Mission      @relation(fields: [missionId], references: [id])
+  submissions Submission[]
+
+  @@unique([userId, missionId])
+  @@index([userId, status])
+  @@index([userId, scheduledFor])
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  userId           String
+  learnerMissionId String
+  attempt          Int // 1 = first submission, 2+ = resubmissions
+  status           SubmissionStatus @default(DRAFT)
+  explanation      String?
+  githubUrl        String?
+  liveUrl          String?
+  submittedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learnerMission LearnerMission @relation(fields: [learnerMissionId], references: [id], onDelete: Cascade)
+  evidence       EvidenceItem[]
+  assessment     Assessment?
+
+  @@unique([learnerMissionId, attempt])
+  @@index([userId, status])
+}
+
+model SubmissionFile {
+  id           String   @id @default(cuid())
+  userId       String
+  storageKey   String   @unique // opaque random key, never the user-supplied name
+  originalName String
+  mimeType     String // determined by content sniffing, never trusted from the client
+  sizeBytes    Int
+  kind         FileKind
+  sha256       String
+  createdAt    DateTime @default(now())
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evidence EvidenceItem?
+
+  @@index([userId])
+}
+
+model Assessment {
+  id           String            @id @default(cuid())
+  userId       String // the learner who owns the work
+  submissionId String            @unique
+  rubricId     String
+  assessorId   String? // null = self-assessment
+  totalPoints  Int
+  maxPoints    Int
+  percentage   Int
+  outcome      AssessmentOutcome
+  weaknesses   String[] // tags used for weakness tracking
+  assessedAt   DateTime          @default(now())
+
+  user       User              @relation("AssessmentLearner", fields: [userId], references: [id], onDelete: Cascade)
+  assessor   User?             @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: SetNull)
+  submission Submission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  rubric     AssessmentRubric  @relation(fields: [rubricId], references: [id])
+  scores     AssessmentScore[]
+  feedback   Feedback[]
+
+  @@index([userId, assessedAt])
+}
+
+model AssessmentScore {
+  id           String  @id @default(cuid())
+  assessmentId String
+  criterionId  String
+  points       Int
+  comment      String?
+
+  assessment Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  criterion  RubricCriterion @relation(fields: [criterionId], references: [id])
+
+  @@unique([assessmentId, criterionId])
+}
+
+model Feedback {
+  id           String       @id @default(cuid())
+  assessmentId String
+  authorId     String
+  kind         FeedbackKind @default(GENERAL)
+  body         String
+  resolvedAt   DateTime? // set when a correction has been addressed
+  createdAt    DateTime     @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  author     User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
+}
+
+model UserSkill {
+  id       String   @id @default(cuid())
+  userId   String
+  skillId  String
+  earnedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId])
+}
+
+model Achievement {
+  id          String @id @default(cuid())
+  code        String @unique
+  name        String
+  description String
+  icon        String
+
+  earned UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+model ActivityRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String // e.g. MISSION_STARTED, SUBMISSION_CREATED, ASSESSMENT_PASSED
+  entityType String?
+  entityId   String?
+  minutes    Int? // learning minutes credited, feeds learning-hours analytics
+  metadata   Json?
+  occurredAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([userId, type])
+}
+
+model Reminder {
+  id        String         @id @default(cuid())
+  userId    String
+  missionId String?
+  title     String
+  remindAt  DateTime // stored in UTC; displayed in the profile timezone
+  repeat    ReminderRepeat @default(NONE)
+  status    ReminderStatus @default(SCHEDULED)
+  createdAt DateTime       @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission       Mission?       @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([userId, remindAt])
+  @@index([status, remindAt])
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  userId       String
+  reminderId   String?
+  instanceId   String?
+  kind         NotificationKind @default(DUE)
+  type         String
+  dedupeKey    String?          @unique // e.g. due:<instanceId>, adv:<instanceId>:15 (one notification per event)
+  scheduledFor DateTime?
+  title        String
+  body         String?
+  href         String?
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminder   Reminder?              @relation(fields: [reminderId], references: [id], onDelete: SetNull)
+  instance   DailyMissionInstance?  @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+// ─────────────── Portfolio and capstone ───────────────
+
+model PortfolioProject {
+  id           String        @id @default(cuid())
+  userId       String
+  departmentId String?
+  missionId    String?
+  title        String
+  summary      String?
+  status       ProjectStatus @default(IN_PROGRESS)
+  tools        String[]
+  repoUrl      String?
+  liveUrl      String?
+  completedAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  mission    Mission?    @relation(fields: [missionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model CapstoneProject {
+  id        String        @id @default(cuid())
+  userId    String
+  name      String        @default("BusinessOS Ghana")
+  summary   String?
+  status    ProjectStatus @default(PLANNED)
+  repoUrl   String?
+  liveUrl   String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones CapstoneMilestone[]
+
+  @@index([userId])
+}
+
+model CapstoneMilestone {
+  id           String          @id @default(cuid())
+  capstoneId   String
+  departmentId String?
+  position     Int
+  title        String
+  description  String?
+  status       MilestoneStatus @default(PENDING)
+  dueDate      DateTime?       @db.Date
+  completedAt  DateTime?
+
+  capstone   CapstoneProject @relation(fields: [capstoneId], references: [id], onDelete: Cascade)
+  department Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([capstoneId, position])
+}
+
+// ─────────────── Imported schedule, daily missions, reminders ───────────────
+
+model ScheduleConfig {
+  id                     String   @id @default(cuid())
+  userId                 String
+  packageId              String // from the import file (package.id)
+  name                   String
+  description            String?
+  schemaVersion          String
+  startDate              DateTime @db.Date
+  timezone               String
+  defaultStartTime       String // HH:mm
+  defaultDurationMinutes Int
+  contentHash            String // SHA-256 of the canonical JSON: identical re-imports are detected as unchanged
+  rawConfig              Json
+  isActive               Boolean  @default(true)
+  importedAt             DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templates WeeklyMissionTemplate[]
+  instances DailyMissionInstance[]
+
+  @@unique([userId, packageId])
+  @@index([userId, isActive])
+}
+
+model WeeklyMissionTemplate {
+  id                String   @id @default(cuid())
+  scheduleId        String
+  key               String // template id from the file, e.g. monday-fullstack
+  dayOfWeek         Int // 0 = Sunday … 6 = Saturday
+  title             String
+  department        String
+  startTime         String // HH:mm
+  durationMinutes   Int
+  objective         String
+  agenda            Json
+  evidenceTypes     String[]
+  notificationTitle String
+
+  schedule  ScheduleConfig         @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  instances DailyMissionInstance[]
+
+  @@unique([scheduleId, key])
+  @@unique([scheduleId, dayOfWeek])
+}
+
+model DailyMissionInstance {
+  id          String             @id @default(cuid())
+  userId      String
+  scheduleId  String
+  templateId  String
+  date        DateTime           @db.Date // the local calendar date in the reminder timezone
+  startAt     DateTime // due instant in UTC (date + reminder time in the timezone)
+  status      DailyMissionStatus @default(SCHEDULED)
+  startedAt   DateTime?
+  submittedAt DateTime?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule      ScheduleConfig            @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  template      WeeklyMissionTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  completions   MissionCompletionRecord[]
+  notifications Notification[]
+
+  @@unique([userId, templateId, date])
+  @@index([userId, date])
+  @@index([userId, status])
+  @@index([startAt])
+}
+
+/// Append-only history of every status change (completion records).
+model MissionCompletionRecord {
+  id         String             @id @default(cuid())
+  userId     String
+  instanceId String
+  fromStatus DailyMissionStatus
+  toStatus   DailyMissionStatus
+  note       String?
+  occurredAt DateTime           @default(now())
+
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instance DailyMissionInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+  @@index([instanceId])
+}
+
+model ReminderSettings {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  enabled        Boolean  @default(true)
+  reminderTime   String? // HH:mm override; null = use each template's own start time
+  timezone       String   @default("Africa/Accra")
+  advanceEnabled Boolean  @default(false)
+  advanceMinutes Int      @default(15)
+  inAppEnabled   Boolean  @default(true)
+  browserEnabled Boolean  @default(false)
+  pushEnabled    Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// One row per notification per channel; unique(notificationId, channel) makes delivery idempotent.
+model NotificationDelivery {
+  id             String          @id @default(cuid())
+  notificationId String
+  channel        DeliveryChannel
+  status         DeliveryStatus  @default(PENDING)
+  attempts       Int             @default(0)
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel])
+  @@index([channel, status])
+}
+
+model PushSubscription {
+  id            String    @id @default(cuid())
+  userId        String
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+  failureCount  Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// The Evidence Vault entry. A file, a link, or a written note, optionally attached to a mission submission.
+model EvidenceItem {
+  id           String         @id @default(cuid())
+  userId       String
+  departmentId String
+  missionId    String?
+  submissionId String? // null = logged in the vault only; set when attached to a submission
+  title        String
+  kind         EvidenceType
+  description  String?
+  linkUrl      String?
+  capturedDate DateTime       @db.Date
+  status       EvidenceStatus @default(LOGGED)
+  fileId       String?        @unique
+  createdAt    DateTime       @default(now())
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department      @relation(fields: [departmentId], references: [id])
+  mission    Mission?        @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  submission Submission?     @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  file       SubmissionFile? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([userId, capturedDate])
+  @@index([userId, departmentId])
+  @@index([submissionId])
+}

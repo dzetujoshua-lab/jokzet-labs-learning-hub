@@ -1,0 +1,26 @@
+# Netlify configuration for the JOKZET Labs Learning Command Center.
+# Secrets (DATABASE_URL, CRON_SECRET, ...) are NEVER stored here: set them with `netlify env:set` or the dashboard.
+
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--no-audit --no-fund"
+
+# Baseline security headers for every response. (A full Content-Security-Policy is planned for the hardening phase.)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# The service worker must be fetched fresh so updates reach browsers promptly.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"

@@ -9,6 +9,42 @@
         "dev"
       ],
       "port": 5173
+    },
+    {
+      "name": "jokzet",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "jokzet-command-center",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "jokzet-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "jokzet-command-center",
+        "run",
+        "start",
+        "--",
+        "-p",
+        "3001"
+      ],
+      "port": 3001
+    },
+    {
+      "name": "base44-harness",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/joshu/AppData/Local/Temp/claude/5758d755d82a94c2/4d4767ec-285a-435e-9914-72bc57f0d2ef/scratchpad/base44-harness",
+        "run",
+        "dev"
+      ],
+      "port": 5174
     }
   ]
 }
