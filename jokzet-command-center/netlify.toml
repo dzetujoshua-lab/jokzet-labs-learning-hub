@@ -3,6 +3,7 @@
 
 [build]
   command = "npm run build"
+  publish = ".next" # relative to the base directory; the Next.js plugin requires it to differ from the base itself
 
 # The Next.js runtime plugin builds the server function and chooses the publish directory itself.
 # Do NOT set a publish directory in the Netlify UI: a custom one turns this into a plain static deploy.
