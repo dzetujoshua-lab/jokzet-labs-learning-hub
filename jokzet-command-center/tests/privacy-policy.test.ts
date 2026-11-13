@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import PrivacyPolicyPage from "@/app/privacy-policy/page";
 import { LegalFooter } from "@/components/legal-footer";
@@ -72,12 +72,27 @@ describe("the page covers everything required", () => {
 });
 
 describe("the page never invents facts", () => {
-  it("shows no contact details that were not provided, and says so plainly", () => {
-    expect(LEGAL.privacyContactEmail).toBeNull();
-    expect(html).not.toContain("mailto:");
-    expect(text).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/); // no email address anywhere
-    expect(text).toContain("A privacy contact address has not been published yet.");
+  it("shows only the contact details the owner provided", () => {
+    expect(LEGAL.privacyContactEmail).toBeTruthy();
+    expect(html).toContain(`href="mailto:${LEGAL.privacyContactEmail}"`);
+    const emails = new Set(text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/g));
+    expect([...emails]).toEqual([LEGAL.privacyContactEmail]); // no other address anywhere
+    expect(text).toContain("Ghana");
+    expect(text).toContain("not currently a registered company");
+    expect(html).toContain('href="https://dpc.gov.gh/"');
+    expect(LEGAL.postalAddress).toBeNull();
+    expect(LEGAL.operatorLegalName).toBeNull();
     expect(text).not.toMatch(/undefined|null|\[|TODO|lorem/i);
+  });
+
+  it("says plainly that no address is published when none is configured", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/legal", async (orig) => ({ ...(await orig<typeof import("@/lib/legal")>()), LEGAL: { ...LEGAL, privacyContactEmail: null } }));
+    const { default: Page } = await import("@/app/privacy-policy/page");
+    const t = renderToStaticMarkup(createElement(Page));
+    vi.doUnmock("@/lib/legal");
+    expect(t).toContain("A privacy contact address has not been published yet.");
+    expect(t).not.toContain("mailto:");
   });
 
   it("makes no claims the app does not support", () => {

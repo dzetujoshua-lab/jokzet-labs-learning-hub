@@ -102,7 +102,7 @@ export default function PrivacyPolicyPage() {
           <p>
             {LEGAL.productName} (the &ldquo;platform&rdquo;) is a personal learning programme at{" "}
             <Ext href={LEGAL.siteUrl}>{LEGAL.siteUrl.replace("https://", "")}</Ext>. It is run by {LEGAL.siteName}
-            {LEGAL.operatorLegalName ? <> ({LEGAL.operatorLegalName})</> : null}. This policy explains what information the platform handles, why, who can see it, how long it is kept, and how you can ask for it to be changed or deleted.
+            {LEGAL.operatorLegalName ? <> ({LEGAL.operatorLegalName})</> : null} from {LEGAL.country}, {LEGAL.businessStatus}. This policy explains what information the platform handles, why, who can see it, how long it is kept, and how you can ask for it to be changed or deleted.
           </p>
           <p>It describes what the platform actually does today. If that changes, this page will be updated.</p>
         </Section>
@@ -217,7 +217,8 @@ export default function PrivacyPolicyPage() {
         <Section id="your-rights" n={11} title="Your rights">
           <p>In the platform you can:</p>
           <List items={["see all of your own information, and change your profile and settings;", "delete evidence that is not part of a submitted mission;", "turn notifications on or off and manage your reminders;", "sign out at any time."]} />
-          <p>You can also contact us to ask for a copy of your information, to correct it, to delete your account, or to raise a concern about how it is handled. Depending on where you live, you may have further rights under data-protection law, including the right to complain to your local data-protection authority.</p>
+          <p>You can also contact us to ask for a copy of your information, to correct it, to delete your account, or to raise a concern about how it is handled. Depending on where you live, you may have further rights under data-protection law, including the right to complain to your local data-protection authority. In Ghana that is the{" "}
+            <Ext href={LEGAL.authorityUrl}>{LEGAL.authorityName}</Ext>.</p>
         </Section>
 
         <Section id="contact" n={12} title="Contact information">
@@ -225,6 +226,8 @@ export default function PrivacyPolicyPage() {
           <dl className="grid gap-x-6 gap-y-2 text-[14px] sm:grid-cols-[9rem_1fr]">
             <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Operator</dt>
             <dd className="text-foreground">{LEGAL.siteName}{LEGAL.operatorLegalName ? ` (${LEGAL.operatorLegalName})` : ""}</dd>
+            <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Country</dt>
+            <dd className="text-foreground">{LEGAL.country}</dd>
             <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Email</dt>
             <dd className="text-foreground">
               {LEGAL.privacyContactEmail ? <a className="text-primary underline-offset-4 hover:underline" href={`mailto:${LEGAL.privacyContactEmail}`}>{LEGAL.privacyContactEmail}</a> : "A privacy contact address has not been published yet."}
