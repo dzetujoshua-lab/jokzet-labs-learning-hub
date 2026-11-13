@@ -79,6 +79,15 @@ export function AuthForm({
         error={errors?.password}
         hint={mode === "register" ? "At least 12 characters, with a letter and a number." : undefined}
       />
+      {mode === "register" ? (
+        <div>
+          <label className="flex items-start gap-2.5 text-sm text-foreground">
+            <input type="checkbox" name="adult" aria-invalid={errors?.adult ? true : undefined} aria-describedby={errors?.adult ? "adult-error" : undefined} className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--primary))]" />
+            <span>I confirm that I am 18 years old or older.</span>
+          </label>
+          {errors?.adult ? <p id="adult-error" className="mt-1.5 text-xs text-destructive">{errors.adult}</p> : null}
+        </div>
+      ) : null}
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? <Loader2 className="animate-spin" /> : null}
         {mode === "login" ? "Sign in" : "Create account"}

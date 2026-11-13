@@ -19,6 +19,11 @@ export const registerSchema = z.object({
   password: passwordSchema,
 });
 
+/** The sign-up form additionally requires the person to confirm they are 18 or older (a checkbox, so "on" when ticked). */
+export const registerFormSchema = registerSchema.extend({
+  adult: z.literal("on", { error: "Confirm that you are 18 or older to create an account" }),
+});
+
 // Login does not enforce password rules: it only needs a non-empty value.
 export const loginSchema = z.object({
   email: emailSchema,

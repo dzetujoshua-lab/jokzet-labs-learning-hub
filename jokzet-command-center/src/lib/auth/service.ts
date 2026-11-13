@@ -15,9 +15,10 @@ export type AuthResult = { ok: true; userId: string } | { ok: false; error: "EMA
  * flag is off (the default) every new account gets the original programme (LEGACY, onboarding COMPLETE, Level 0 scheduled).
  * With the flag on, a new account is PERSONALISED, starts onboarding and is not given the fixed schedule.
  */
-export async function registerUser(input: RegisterInput): Promise<AuthResult> {
+export async function registerUser(input: RegisterInput, options: { adultConfirmed?: boolean } = {}): Promise<AuthResult> {
   const passwordHash = await hashPassword(input.password);
   const personalised = personalisedLearningEnabled();
+  const adultConfirmedAt = options.adultConfirmed ? new Date() : null; // only the sign-up form, which asked, can set this
   try {
     const user = await db.$transaction(async (tx) => {
       const created = await tx.user.create({
@@ -26,8 +27,8 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
           passwordHash,
           profile: {
             create: personalised
-              ? { displayName: input.displayName, learnerMode: "PERSONALISED", onboardingStatus: "NOT_STARTED" }
-              : { displayName: input.displayName, learnerMode: "LEGACY", onboardingStatus: "COMPLETE" },
+              ? { displayName: input.displayName, learnerMode: "PERSONALISED", onboardingStatus: "NOT_STARTED", adultConfirmedAt }
+              : { displayName: input.displayName, learnerMode: "LEGACY", onboardingStatus: "COMPLETE", adultConfirmedAt },
           },
         },
       });
