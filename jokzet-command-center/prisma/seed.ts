@@ -2,24 +2,28 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type MissionPhase } from "../src/generated/prisma/client";
 import { DEPARTMENTS } from "../src/lib/departments";
-import { LEVEL0, PASSING_SCORE, type MissionSpec } from "./curriculum/level0";
+import { LEVEL0, PASSING_SCORE } from "./curriculum/level0";
+import { archiveRetired, ensurePlaceholderResource, syncRubric } from "./curriculum/sync";
+import { assertValidCurriculum } from "./curriculum/validate";
 
 /**
- * Idempotent seed: safe to run repeatedly and safe on a database that already holds learner data.
- * Curriculum rows are upserted by stable keys; learner progress rows are never touched.
- * No learning URLs are invented: demonstration resources carry url = null.
+ * Idempotent and NON-DESTRUCTIVE seed: safe to run repeatedly and on a database that already holds learner data.
+ *  - The whole curriculum is validated first; one bad mission aborts the run before anything is written.
+ *  - Curriculum rows are upserted by stable keys; learner progress rows are never touched.
+ *  - Resources are never deleted: a placeholder is created only when a mission has none (so a link that was added and
+ *    approved later survives a re-seed). No learning URLs are invented: placeholders carry url = null.
+ *  - Rubrics are versioned: if criteria text, points, order or the passing score change, the rubric version is bumped
+ *    (assessments store the version and a snapshot of each criterion, so past scores keep their meaning). Removing
+ *    criteria that already have scores is refused.
+ *  - Missions that disappear from the curriculum files are archived, never deleted.
  */
-
-function validate(mission: MissionSpec) {
-  const total = mission.rubric.reduce((sum, [, , points]) => sum + points, 0);
-  if (total !== 100) throw new Error(`${mission.code}: rubric points sum to ${total}, expected 100`);
-  if (!mission.watch.length || !mission.doSteps.length) throw new Error(`${mission.code}: missing WATCH/DO steps`);
-}
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
+  assertValidCurriculum(LEVEL0);
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  let rubricBumps = 0;
 
   try {
     for (const [index, d] of DEPARTMENTS.entries()) {
@@ -59,7 +63,6 @@ async function main() {
       }
 
       for (const [order, m] of spec.missions.entries()) {
-        validate(m);
         const data = {
           departmentId: department.id,
           levelId: level.id,
@@ -74,6 +77,7 @@ async function main() {
           submissionRequirements: m.show,
           remediation: m.remediation,
           sortOrder: order,
+          status: "PUBLISHED" as const, // validated above; isPublished stays in sync (database CHECK)
           isPublished: true,
         };
         const mission = await prisma.mission.upsert({
@@ -98,43 +102,31 @@ async function main() {
         }
         await prisma.missionStep.deleteMany({ where: { missionId: mission.id, position: { gt: steps.length } } });
 
-        // Resource placeholder: a demonstration is required but no link has been supplied yet.
-        await prisma.resource.deleteMany({ where: { missionId: mission.id } });
-        await prisma.resource.create({
-          data: {
-            missionId: mission.id,
-            title: "Demonstration video",
-            type: "DEMONSTRATION",
-            url: null,
-            notes: "Demonstration to be supplied. No link has been verified yet.",
-          },
-        });
+        // Resource placeholder: only when the mission has none. Never deleted or overwritten (see ensurePlaceholderResource).
+        await ensurePlaceholderResource(prisma, mission.id);
 
-        // Rubric: criteria upserted by position so existing assessment scores stay valid.
-        const rubric = await prisma.assessmentRubric.upsert({
-          where: { missionId: mission.id },
-          update: { passingScore: PASSING_SCORE },
-          create: { missionId: mission.id, passingScore: PASSING_SCORE },
-        });
-        for (const [i, [name, description, maxPoints]] of m.rubric.entries()) {
-          await prisma.rubricCriterion.upsert({
-            where: { rubricId_position: { rubricId: rubric.id, position: i + 1 } },
-            update: { name, description, maxPoints },
-            create: { rubricId: rubric.id, position: i + 1, name, description, maxPoints },
-          });
-        }
+        // Rubric: versioned and safe (see syncRubric): a change bumps the version; scored criteria are never removed.
+        if (await syncRubric(prisma, mission.id, m.code, { passingScore: PASSING_SCORE, rubric: m.rubric })) rubricBumps += 1;
 
-        await prisma.missionSkill.deleteMany({ where: { missionId: mission.id } });
-        await prisma.missionSkill.createMany({
-          data: m.skills.map((s) => {
-            const skillId = skillIds.get(s);
-            if (!skillId) throw new Error(`${m.code}: unknown skill "${s}"`);
-            return { missionId: mission.id, skillId };
-          }),
+        // Skills: add what is missing, remove only what the file no longer lists (no delete-and-recreate churn).
+        const wanted = m.skills.map((name) => {
+          const skillId = skillIds.get(name);
+          if (!skillId) throw new Error(`${m.code}: unknown skill "${name}"`);
+          return skillId;
         });
+        const current = await prisma.missionSkill.findMany({ where: { missionId: mission.id }, select: { skillId: true } });
+        const currentIds = new Set(current.map((c) => c.skillId));
+        const stale = [...currentIds].filter((id) => !wanted.includes(id));
+        if (stale.length) await prisma.missionSkill.deleteMany({ where: { missionId: mission.id, skillId: { in: stale } } });
+        const missing = wanted.filter((id) => !currentIds.has(id));
+        if (missing.length) await prisma.missionSkill.createMany({ data: missing.map((skillId) => ({ missionId: mission.id, skillId })), skipDuplicates: true });
         missionCount += 1;
       }
     }
+
+    // Curriculum missions that are no longer in the files are archived (kept for history), never deleted.
+    const codes = LEVEL0.flatMap((spec) => spec.missions.map((m) => m.code));
+    const archived = { count: await archiveRetired(prisma, codes) };
 
     const [departments, levels, skills, missions] = await Promise.all([
       prisma.department.count(),
@@ -142,7 +134,7 @@ async function main() {
       prisma.skill.count(),
       prisma.mission.count({ where: { createdById: null } }),
     ]);
-    console.log(`Seed complete: ${departments} departments, ${levels} levels, ${skills} skills, ${missions} curriculum missions (${missionCount} upserted).`);
+    console.log(`Seed complete: ${departments} departments, ${levels} levels, ${skills} skills, ${missions} curriculum missions (${missionCount} upserted, ${rubricBumps} rubric version bump(s), ${archived.count} archived).`);
   } finally {
     await prisma.$disconnect();
   }

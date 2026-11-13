@@ -17,6 +17,36 @@ enum UserRole {
   ADMIN
 }
 
+/// Who produced an assessment. HUMAN and AUTOMATED are used from the human-review phase; every existing row is SELF.
+enum AssessorKind {
+  SELF
+  AUTOMATED
+  HUMAN
+}
+
+/// Lifecycle of an assessment record. Existing (self-scored) rows are SELF_RECORDED and keep today's behaviour.
+enum AssessmentStatus {
+  SELF_RECORDED
+  PENDING_REVIEW
+  VERIFIED
+  NEEDS_REVISION
+  REJECTED
+}
+
+/// How much trust a piece of credit carries. Self-scored work is SELF_ASSESSED; only reviewed work becomes VERIFIED.
+enum AssuranceTier {
+  SELF_ASSESSED
+  VERIFIED
+}
+
+/// Publication state of a mission. `isPublished` stays in sync (see the CHECK in the migration).
+enum MissionStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
 enum MissionPhase {
   WATCH
   DO
@@ -282,25 +312,26 @@ model Skill {
 }
 
 model Mission {
-  id                     String       @id @default(cuid())
-  code                   String?      @unique // curriculum missions only, e.g. FSWD-L0-01
+  id                     String        @id @default(cuid())
+  code                   String?       @unique // curriculum missions only, e.g. FSWD-L0-01
   departmentId           String
   levelId                String? // null for learner-created missions
   createdById            String? // null = curriculum mission; set = learner-created (Base44 "New mission")
   title                  String
   objective              String? // curriculum missions must have the fields below; enforced by the seed validator
-  durationMinutes        Int          @default(45)
-  kind                   MissionKind  @default(BUILD)
-  evidenceType           EvidenceType @default(SCREENSHOT)
-  xpReward               Int          @default(25)
+  durationMinutes        Int           @default(45)
+  kind                   MissionKind   @default(BUILD)
+  evidenceType           EvidenceType  @default(SCREENSHOT)
+  xpReward               Int           @default(25)
   requiredTools          String[]
   experimentChallenge    String?
   submissionRequirements String?
   remediation            String?
   notes                  String?
   weekday                Int? // 0 = Sunday … 6 = Saturday, informs the weekly schedule
-  sortOrder              Int          @default(0)
-  isPublished            Boolean      @default(false)
+  sortOrder              Int           @default(0)
+  isPublished            Boolean       @default(false)
+  status                 MissionStatus @default(DRAFT) // kept in sync with isPublished: status = PUBLISHED exactly when isPublished
 
   department      Department         @relation(fields: [departmentId], references: [id])
   level           Level?             @relation(fields: [levelId], references: [id])
@@ -358,6 +389,7 @@ model AssessmentRubric {
   id           String @id @default(cuid())
   missionId    String @unique
   passingScore Int // percentage 0–100
+  version      Int    @default(1) // bumped by the seed whenever criteria or the passing score change
 
   mission     Mission           @relation(fields: [missionId], references: [id], onDelete: Cascade)
   criteria    RubricCriterion[]
@@ -432,7 +464,7 @@ model Submission {
   updatedAt        DateTime         @updatedAt
 
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  learnerMission LearnerMission @relation(fields: [learnerMissionId], references: [id], onDelete: Cascade)
+  learnerMission LearnerMission @relation(fields: [learnerMissionId], references: [id], onDelete: NoAction)
   evidence       EvidenceItem[]
   assessment     Assessment?
 
@@ -458,21 +490,24 @@ model SubmissionFile {
 }
 
 model Assessment {
-  id           String            @id @default(cuid())
-  userId       String // the learner who owns the work
-  submissionId String            @unique
-  rubricId     String
-  assessorId   String? // null = self-assessment
-  totalPoints  Int
-  maxPoints    Int
-  percentage   Int
-  outcome      AssessmentOutcome
-  weaknesses   String[] // tags used for weakness tracking
-  assessedAt   DateTime          @default(now())
+  id            String            @id @default(cuid())
+  userId        String // the learner who owns the work
+  submissionId  String            @unique
+  rubricId      String
+  assessorId    String? // null = self-assessment
+  assessorKind  AssessorKind      @default(SELF)
+  status        AssessmentStatus  @default(SELF_RECORDED)
+  rubricVersion Int               @default(1) // the rubric version these scores were given against
+  totalPoints   Int
+  maxPoints     Int
+  percentage    Int
+  outcome       AssessmentOutcome
+  weaknesses    String[] // tags used for weakness tracking
+  assessedAt    DateTime          @default(now())
 
   user       User              @relation("AssessmentLearner", fields: [userId], references: [id], onDelete: Cascade)
   assessor   User?             @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: SetNull)
-  submission Submission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission Submission        @relation(fields: [submissionId], references: [id], onDelete: NoAction)
   rubric     AssessmentRubric  @relation(fields: [rubricId], references: [id])
   scores     AssessmentScore[]
   feedback   Feedback[]
@@ -481,11 +516,13 @@ model Assessment {
 }
 
 model AssessmentScore {
-  id           String  @id @default(cuid())
-  assessmentId String
-  criterionId  String
-  points       Int
-  comment      String?
+  id            String  @id @default(cuid())
+  assessmentId  String
+  criterionId   String
+  points        Int
+  comment       String?
+  criterionName String? // snapshot of the criterion at assessment time, so later rubric edits never change what a past score meant
+  maxPoints     Int? // snapshot of the criterion's maximum points
 
   assessment Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   criterion  RubricCriterion @relation(fields: [criterionId], references: [id])
@@ -509,10 +546,11 @@ model Feedback {
 }
 
 model UserSkill {
-  id       String   @id @default(cuid())
+  id       String        @id @default(cuid())
   userId   String
   skillId  String
-  earnedAt DateTime @default(now())
+  earnedAt DateTime      @default(now())
+  tier     AssuranceTier @default(SELF_ASSESSED) // VERIFIED only after a reviewer confirms the assessment
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
