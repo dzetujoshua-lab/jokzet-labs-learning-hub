@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { getAssessmentOverview } from "@/lib/assessments/service";
-import { requireUser } from "@/lib/auth/dal";
+import { canReview, requireUser } from "@/lib/auth/dal";
 import { ensureLearnerSetup, listDepartments } from "@/lib/missions/service";
 import { fmtDate, metaFor } from "@/lib/programme";
 
@@ -39,6 +39,11 @@ export default async function AssessmentsPage() {
         title="Checkpoints"
         description="Score submitted evidence against the rubric. A pass finishes the mission and earns its XP; anything else comes back with corrections."
       >
+        {canReview(user.role) ? (
+          <Button asChild variant="secondary" className="gap-1.5">
+            <Link href="/review">Review queue</Link>
+          </Button>
+        ) : null}
         {pending.length ? (
           <Button asChild className="gap-1.5">
             <Link href={`/assessments/${pending[0].submissionId}`}>

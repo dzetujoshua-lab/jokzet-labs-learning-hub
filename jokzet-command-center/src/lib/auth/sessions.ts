@@ -24,7 +24,8 @@ export async function createSessionRecord(userId: string, meta: { userAgent?: st
   return { token, expiresAt };
 }
 
-export type SessionUser = { id: string; email: string; displayName: string; role: "LEARNER" | "ADMIN" };
+export type Role = "LEARNER" | "ADMIN" | "AUTHOR" | "REVIEWER";
+export type SessionUser = { id: string; email: string; displayName: string; role: Role };
 
 /** Resolves a raw cookie token to its user. Expired sessions and disabled users resolve to null. */
 export async function resolveSession(token: string | undefined): Promise<SessionUser | null> {

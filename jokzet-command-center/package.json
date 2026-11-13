@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "push:keys": "node scripts/push-keys.mjs",
-    "reminders:dispatch": "node scripts/dispatch.mjs"
+    "reminders:dispatch": "node scripts/dispatch.mjs",
+    "roles": "tsx scripts/roles.ts"
   },
   "dependencies": {
     "@netlify/blobs": "^11.1.9",

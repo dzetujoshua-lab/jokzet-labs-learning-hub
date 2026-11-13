@@ -8,7 +8,9 @@ import { DeptGlyph } from "@/components/dashboard/dept-glyph";
 import { EvidenceMedia } from "@/components/evidence/evidence-media";
 import { Button } from "@/components/ui/button";
 import { getAssessmentContext } from "@/lib/assessments/service";
+import { ReviewStatus } from "@/components/reviews/review-status";
 import { requireUser } from "@/lib/auth/dal";
+import { getReviewState } from "@/lib/reviews/service";
 import { fmtDate, metaFor, toLabel } from "@/lib/programme";
 
 export const metadata: Metadata = { title: "Assessment" };
@@ -23,6 +25,7 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
   const meta = metaFor(mission.department.code);
   const rubric = mission.rubric;
   const assessed = submission.status === "ASSESSED" && submission.assessment;
+  const reviewState = assessed ? await getReviewState(user.id, submission.assessment!.id) : null;
 
   return (
     <div className="space-y-6">
@@ -54,6 +57,7 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          {reviewState ? <ReviewStatus state={reviewState} canAsk /> : null}
           {assessed ? (
             <AssessmentResult assessment={submission.assessment!} />
           ) : rubric ? (

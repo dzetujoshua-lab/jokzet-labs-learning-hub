@@ -2,7 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, sessionCookieOptions } from "./cookie";
-import { createSessionRecord, deleteSessionByToken, resolveSession, type SessionUser } from "./sessions";
+import { createSessionRecord, deleteSessionByToken, resolveSession, type Role, type SessionUser } from "./sessions";
 
 /** Reads the session cookie and resolves it against the database on every call (no caching, so revocation is immediate). */
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -14,6 +14,20 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/** Roles that may review other learners' work (administrators review every department; reviewers only their own scope). */
+export const canReview = (role: Role): boolean => role === "ADMIN" || role === "REVIEWER";
+
+/**
+ * Like requireUser, but also requires one of the given roles. Anyone else is sent to the dashboard without being told the
+ * page exists. Roles are read from the database on every request (never from the cookie), so a revoked role stops working
+ * immediately.
+ */
+export async function requireRole(...roles: Role[]): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!roles.includes(user.role)) redirect("/");
   return user;
 }
 
