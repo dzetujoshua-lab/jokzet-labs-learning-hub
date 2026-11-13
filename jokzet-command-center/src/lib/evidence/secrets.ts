@@ -27,3 +27,9 @@ export function detectSecretInUrl(url: string): boolean {
 export function secretMessage(found: string[]): string {
   return `This looks like it contains ${found[0]}. Remove secrets before saving evidence (the programme rules forbid storing them).`;
 }
+
+/** For schemas: the message to show when `value` looks like it contains a secret, or null when it is clean. */
+export function secretIssue(value: string): string | null {
+  const found = detectSecrets(value);
+  return found.length ? secretMessage(found) : null;
+}

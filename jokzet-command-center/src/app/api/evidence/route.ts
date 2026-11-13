@@ -1,9 +1,10 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { MAX_BYTES } from "@/lib/evidence/files";
 import { createEvidence } from "@/lib/evidence/service";
 import { isSameOrigin, json } from "@/lib/http";
+import { LIMITS, bucketKey, clientIp, rateLimitHit } from "@/lib/ratelimit";
 
 const MAX_REQUEST_BYTES = MAX_BYTES.VIDEO + 1024 * 1024; // the largest file type plus form fields
 
@@ -12,6 +13,16 @@ export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return json({ error: "Forbidden" }, 403);
   const user = await getCurrentUser();
   if (!user) return json({ error: "Unauthorized" }, 401);
+
+  // Throttle before reading the body: uploads are the most expensive thing a learner can trigger.
+  const [perUser, perIp] = await Promise.all([
+    rateLimitHit(bucketKey("evidence:user", user.id), LIMITS.evidenceUser),
+    rateLimitHit(bucketKey("evidence:ip", clientIp(request.headers)), LIMITS.evidenceIp),
+  ]);
+  if (!perUser.ok || !perIp.ok) {
+    const retry = Math.max(perUser.ok ? 0 : perUser.retryAfterSeconds, perIp.ok ? 0 : perIp.retryAfterSeconds);
+    return NextResponse.json({ error: "Too many uploads. Please wait a little and try again." }, { status: 429, headers: { "Retry-After": String(retry), "Cache-Control": "no-store" } });
+  }
 
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_REQUEST_BYTES) return json({ error: "That upload is too large." }, 413);

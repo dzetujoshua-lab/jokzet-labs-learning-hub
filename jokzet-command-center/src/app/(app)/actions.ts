@@ -7,13 +7,19 @@ import { setCorrectionResolved, assessSubmission, type AssessResult } from "@/li
 import { deleteEvidence } from "@/lib/evidence/service";
 import { attachToDraft, detachFromDraft } from "@/lib/missions/submissions";
 import { createMissionSchema } from "@/lib/missions/schema";
-import { saveProgress, startMission, submitMission } from "@/lib/missions/progress";
+import { saveProgress, saveProgressSchema, startMission, submitMission } from "@/lib/missions/progress";
+import { milestoneSchema } from "@/lib/missions/schema";
 import { createCustomMission, deleteMission, saveNextMilestone, setMissionDone } from "@/lib/missions/service";
 import { createTestNotification, markAllRead } from "@/lib/notifications/engine";
 import { setDailyStatus, USER_SETTABLE } from "@/lib/schedule/daily";
 import { confirmImport, previewImport, type ImportPreview, type ImportResult } from "@/lib/schedule/importer";
 import { MAX_IMPORT_BYTES } from "@/lib/schedule/constants";
 import { addFromMission, deletePiece, moveCapstoneStage, saveCapstone, savePiece, type CapstoneInput, type PieceInput } from "@/lib/portfolio/service";
+import {
+  adjustStock, createSale, deleteContact, deleteExpense, deleteProduct, recordPayment, restock, saveContact, saveExpense, saveProduct, voidSale,
+  type ContactInput, type ExpenseInput, type ProductInput, type RestockInput, type SaleInput,
+} from "@/lib/businessos/service";
+import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -50,6 +56,8 @@ export async function createMission(_prev: MissionFormState, formData: FormData)
 
 export async function updateMilestone(departmentId: string, text: string): Promise<{ ok: boolean; error?: string }> {
   const user = await requireUser();
+  const checked = milestoneSchema.safeParse(text);
+  if (!checked.success) return { ok: false, error: checked.error.issues[0]?.message ?? "Check the milestone and try again." };
   try {
     const saved = await saveNextMilestone(user.id, idSchema.parse(departmentId), text);
     refresh();
@@ -73,10 +81,10 @@ export type WorkflowState = { ok?: boolean; error?: string; message?: string } |
 
 export async function saveProgressAction(learnerMissionId: string, _prev: WorkflowState, formData: FormData): Promise<WorkflowState> {
   const user = await requireUser();
-  const saved = await saveProgress(user.id, idSchema.parse(learnerMissionId), {
-    completedSteps: formData.getAll("step").map(String),
-    notes: String(formData.get("notes") ?? ""),
-  });
+  const input = { completedSteps: formData.getAll("step").map(String), notes: String(formData.get("notes") ?? "") };
+  const checked = saveProgressSchema.safeParse(input);
+  if (!checked.success) return { error: checked.error.issues[0]?.message ?? "Check your notes and try again." };
+  const saved = await saveProgress(user.id, idSchema.parse(learnerMissionId), input);
   if (!saved) return { error: "Mission not found." };
   refresh();
   return { ok: true, message: "Progress saved" };
@@ -139,6 +147,8 @@ export async function setDailyStatusAction(instanceId: string, status: string): 
 
 export async function sendTestNotificationAction(): Promise<{ ok: boolean }> {
   const user = await requireUser();
+  const allowed = await rateLimitHit(bucketKey("testnotif:user", user.id), LIMITS.testNotificationUser);
+  if (!allowed.ok) return { ok: false };
   const key = await createTestNotification(user.id);
   refresh();
   return { ok: key !== null };
@@ -222,4 +232,58 @@ export async function moveCapstoneAction(delta: 1 | -1): Promise<{ ok: boolean }
   const ok = await moveCapstoneStage(user.id, z.union([z.literal(1), z.literal(-1)]).parse(delta));
   refresh();
   return { ok };
+}
+
+// ── BusinessOS Ghana (capstone workspace) ──
+
+type Done = { ok: boolean; error?: string };
+const done = (r: { ok: boolean; error?: string }): Done => {
+  if (r.ok) refresh();
+  return r.ok ? { ok: true } : { ok: false, error: (r as { error: string }).error };
+};
+const kindSchema = z.enum(["customer", "supplier"]);
+
+export async function saveContactAction(kind: "customer" | "supplier", recordId: string | null, input: ContactInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveContact(user.id, kindSchema.parse(kind), recordId === null ? null : idSchema.parse(recordId), input));
+}
+export async function deleteContactAction(kind: "customer" | "supplier", recordId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteContact(user.id, kindSchema.parse(kind), idSchema.parse(recordId)), error: "Not found." });
+}
+export async function saveProductAction(productId: string | null, input: ProductInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveProduct(user.id, productId === null ? null : idSchema.parse(productId), input));
+}
+export async function deleteProductAction(productId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteProduct(user.id, idSchema.parse(productId)), error: "Not found." });
+}
+export async function restockAction(productId: string, input: RestockInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await restock(user.id, idSchema.parse(productId), input));
+}
+export async function adjustStockAction(productId: string, delta: number, note: string): Promise<Done> {
+  const user = await requireUser();
+  return done(await adjustStock(user.id, idSchema.parse(productId), z.number().int().parse(delta), z.string().max(200).parse(note)));
+}
+export async function createSaleAction(input: SaleInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await createSale(user.id, input));
+}
+export async function recordPaymentAction(saleId: string, amount: string): Promise<Done> {
+  const user = await requireUser();
+  return done(await recordPayment(user.id, idSchema.parse(saleId), z.string().max(30).parse(amount)));
+}
+export async function voidSaleAction(saleId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await voidSale(user.id, idSchema.parse(saleId)), error: "Not found." });
+}
+export async function saveExpenseAction(expenseId: string | null, input: ExpenseInput): Promise<Done> {
+  const user = await requireUser();
+  return done(await saveExpense(user.id, expenseId === null ? null : idSchema.parse(expenseId), input));
+}
+export async function deleteExpenseAction(expenseId: string): Promise<Done> {
+  const user = await requireUser();
+  return done({ ok: await deleteExpense(user.id, idSchema.parse(expenseId)), error: "Not found." });
 }

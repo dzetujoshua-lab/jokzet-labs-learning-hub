@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { secretIssue } from "@/lib/evidence/secrets";
 import { MAX_IMPORT_BYTES } from "./constants";
 import { isValidTimezone } from "./time";
 
@@ -80,6 +81,24 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** Scans every string value (not the JSON syntax) and returns the first secret warning, if any. */
+function firstSecretIn(value: unknown, depth = 0): string | null {
+  if (depth > 8) return null;
+  if (typeof value === "string") return secretIssue(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstSecretIn(item, depth + 1);
+      if (found) return found;
+    }
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      const found = firstSecretIn(item, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 export function parseScheduleFile(raw: string): ParseResult {
   if (typeof raw !== "string" || raw.length === 0) return { ok: false, errors: ["The file is empty."] };
   if (Buffer.byteLength(raw, "utf8") > MAX_IMPORT_BYTES) return { ok: false, errors: ["The file is larger than 200 KB."] };
@@ -96,5 +115,8 @@ export function parseScheduleFile(raw: string): ParseResult {
     const errors = parsed.error.issues.slice(0, 25).map((i) => `${formatPath(i.path) || "file"}: ${i.message}`);
     return { ok: false, errors };
   }
+  // Imported text is stored and shown back: no passwords, keys or tokens (same rule as every other free-text field).
+  const secret = firstSecretIn(parsed.data);
+  if (secret) return { ok: false, errors: [secret] };
   return { ok: true, data: parsed.data, hash: createHash("sha256").update(canonical(parsed.data)).digest("hex") };
 }

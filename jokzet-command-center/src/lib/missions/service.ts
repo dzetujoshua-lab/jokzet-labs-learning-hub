@@ -181,6 +181,9 @@ export async function deleteMission(userId: string, learnerMissionId: string): P
       include: { mission: true },
     });
     if (!lm) return false;
+    // Submitted and assessed work is history: deleting the mission would cascade away the learner's submissions,
+    // evidence links and assessments. Refuse (the board only offers delete for self-made tasks, which cannot have any).
+    if ((await tx.submission.count({ where: { learnerMissionId: lm.id, userId } })) > 0) return false;
     if (lm.xpAwarded > 0) await adjustDepartmentXp(tx, userId, lm.mission.departmentId, -lm.xpAwarded);
     await tx.learnerMission.delete({ where: { id: lm.id } });
     if (lm.mission.createdById === userId) await tx.mission.delete({ where: { id: lm.missionId } });

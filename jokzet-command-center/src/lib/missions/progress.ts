@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { detectSecretInUrl, detectSecrets, secretMessage } from "@/lib/evidence/secrets";
+import { detectSecretInUrl, detectSecrets, secretIssue, secretMessage } from "@/lib/evidence/secrets";
 
 const httpsUrl = z
   .string()
@@ -18,7 +18,15 @@ export type SubmitInput = z.input<typeof submitSchema>;
 
 export const saveProgressSchema = z.object({
   completedSteps: z.array(z.string().max(64)).max(50),
-  notes: z.string().trim().max(4000).default(""),
+  notes: z
+    .string()
+    .trim()
+    .max(4000)
+    .superRefine((value, ctx) => {
+      const message = secretIssue(value);
+      if (message) ctx.addIssue({ code: "custom", message });
+    })
+    .default(""),
 });
 
 /** Mission detail for the signed-in learner. Curriculum missions only (code present). */

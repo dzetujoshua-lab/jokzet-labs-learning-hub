@@ -3,13 +3,11 @@ import { db } from "@/lib/db";
 import { PROGRAMME_START } from "@/lib/departments";
 import { scheduleLevelZero } from "@/lib/missions/service";
 import { isoToDate } from "@/lib/programme";
+import { LIMITS, bucketKey, rateLimitHit, rateLimitPeek, rateLimitReset } from "@/lib/ratelimit";
 import { burnPasswordCheck, hashPassword, verifyPassword } from "./password";
 import type { LoginInput, RegisterInput } from "./validation";
 
-export const MAX_FAILED_LOGINS = 5;
-export const LOCKOUT_MS = 15 * 60 * 1000;
-
-export type AuthResult = { ok: true; userId: string } | { ok: false; error: "EMAIL_TAKEN" | "INVALID_CREDENTIALS" | "LOCKED" };
+export type AuthResult = { ok: true; userId: string } | { ok: false; error: "EMAIL_TAKEN" | "INVALID_CREDENTIALS" };
 
 /** Creates the user, profile and a Level 0 record for every department in one transaction. */
 export async function registerUser(input: RegisterInput): Promise<AuthResult> {
@@ -40,32 +38,37 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
 }
 
 /**
- * Verifies credentials with account lockout. Unknown emails and wrong passwords return the same
- * INVALID_CREDENTIALS result, and unknown emails still pay the cost of a hash check.
+ * Verifies credentials. Every failure looks the same to the caller: an unknown email, a wrong password, a disabled
+ * account and a throttled attempt all return INVALID_CREDENTIALS after a comparable amount of work, so the response
+ * never reveals whether an account exists or whether it is being throttled.
+ *
+ * Brute force is limited by the database-backed rate limiter rather than by locking the account (an account lock lets
+ * anyone lock anyone out and leaks which emails exist):
+ *  - failures for one email from one address, and for one email from anywhere (slow distributed guessing),
+ *  - all attempts from one address (password spraying across many emails).
+ * A successful sign-in clears the per-address failure counter for that email.
  */
-export async function authenticate(input: LoginInput): Promise<AuthResult> {
-  const user = await db.user.findUnique({ where: { email: input.email } });
-  if (!user || !user.isActive) {
+export async function authenticate(input: LoginInput, ctx: { ip?: string } = {}): Promise<AuthResult & { throttled?: boolean }> {
+  const ip = ctx.ip || "unknown";
+  const ipKey = bucketKey("login:ip", ip);
+  const ipEmailKey = bucketKey("login:ie", ip, input.email);
+  const emailKey = bucketKey("login:e", input.email);
+
+  // Count every attempt from this address; check (without counting) the failure buckets.
+  const spray = await rateLimitHit(ipKey, LIMITS.loginIp);
+  const [ipEmail, email] = await Promise.all([rateLimitPeek(ipEmailKey, LIMITS.loginIpEmail), rateLimitPeek(emailKey, LIMITS.loginEmail)]);
+  if (!spray.ok || !ipEmail.ok || !email.ok) {
     await burnPasswordCheck(input.password);
+    return { ok: false, error: "INVALID_CREDENTIALS", throttled: true };
+  }
+
+  const user = await db.user.findUnique({ where: { email: input.email } });
+  const valid = user && user.isActive ? await verifyPassword(user.passwordHash, input.password) : (await burnPasswordCheck(input.password), false);
+  if (!user || !user.isActive || !valid) {
+    await Promise.all([rateLimitHit(ipEmailKey, LIMITS.loginIpEmail), rateLimitHit(emailKey, LIMITS.loginEmail)]);
     return { ok: false, error: "INVALID_CREDENTIALS" };
   }
-  if (user.lockedUntil && user.lockedUntil > new Date()) {
-    return { ok: false, error: "LOCKED" };
-  }
 
-  const valid = await verifyPassword(user.passwordHash, input.password);
-  if (!valid) {
-    const failed = user.failedLogins + 1;
-    const lock = failed >= MAX_FAILED_LOGINS;
-    await db.user.update({
-      where: { id: user.id },
-      data: { failedLogins: lock ? 0 : failed, lockedUntil: lock ? new Date(Date.now() + LOCKOUT_MS) : null },
-    });
-    return { ok: false, error: lock ? "LOCKED" : "INVALID_CREDENTIALS" };
-  }
-
-  if (user.failedLogins > 0 || user.lockedUntil) {
-    await db.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null } });
-  }
+  await rateLimitReset(ipEmailKey);
   return { ok: true, userId: user.id };
 }
