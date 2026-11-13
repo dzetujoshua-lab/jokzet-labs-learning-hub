@@ -9,6 +9,7 @@ export const DEFAULT_ADVANCE_MINUTES = 15;
 type NewNotification = {
   userId: string;
   instanceId: string | null;
+  planItemId?: string | null;
   kind: NotificationKind;
   dedupeKey: string;
   scheduledFor: Date;
@@ -24,13 +25,14 @@ async function createOnce(n: NewNotification): Promise<boolean> {
       data: {
         userId: n.userId,
         instanceId: n.instanceId,
+        planItemId: n.planItemId ?? null,
         kind: n.kind,
         type: n.kind,
         dedupeKey: n.dedupeKey,
         scheduledFor: n.scheduledFor,
         title: n.title,
         body: n.body,
-        href: n.instanceId ? "/" : "/reminders",
+        href: n.instanceId || n.planItemId ? "/" : "/reminders",
         deliveries: { create: n.channels.map((channel) => ({ channel })) },
       },
     });
@@ -86,6 +88,35 @@ export async function planNotifications(userId: string, now: Date = new Date()):
         userId, instanceId: i.id, kind: "ADVANCE", dedupeKey: `adv:${i.id}:${settings.advanceMinutes}`, scheduledFor: new Date(i.startAt.getTime() - lead), channels,
         title: `Starts in ${settings.advanceMinutes} minutes: ${i.template.title}`,
         body: `${localTimeOf(i.startAt, settings.timezone)} · ${i.template.durationMinutes} min`,
+      });
+      if (ok) created += 1;
+    }
+  }
+  return created + (await planItemNotifications(userId, settings, channels, now));
+}
+
+/**
+ * Reminders for the learner's plan sessions (only while their plan is ACTIVE): "at start" within the due window and, if enabled,
+ * an advance reminder. Same dedupe guarantee as the daily missions: due:item:<id> and adv:item:<id>:<minutes>.
+ */
+async function planItemNotifications(userId: string, settings: NonNullable<Awaited<ReturnType<typeof getSettings>>>, channels: DeliveryChannel[], now: Date): Promise<number> {
+  let created = 0;
+  const active = { userId, status: "PLANNED" as const, plan: { status: "ACTIVE" as const } };
+  const due = await db.learningPlanItem.findMany({ where: { ...active, startAt: { lte: now, gt: new Date(now.getTime() - DUE_WINDOW_MS) } }, orderBy: { startAt: "asc" } });
+  for (const i of due) {
+    const ok = await createOnce({
+      userId, instanceId: null, planItemId: i.id, kind: "DUE", dedupeKey: `due:item:${i.id}`, scheduledFor: i.startAt, channels, title: i.title,
+      body: `${localTimeOf(i.startAt, settings.timezone)} · ${i.minutes} min — ${i.objective}`,
+    });
+    if (ok) created += 1;
+  }
+  if (settings.advanceEnabled && settings.advanceMinutes > 0) {
+    const lead = settings.advanceMinutes * 60_000;
+    const upcoming = await db.learningPlanItem.findMany({ where: { ...active, startAt: { gt: now, lte: new Date(now.getTime() + lead) } }, orderBy: { startAt: "asc" } });
+    for (const i of upcoming) {
+      const ok = await createOnce({
+        userId, instanceId: null, planItemId: i.id, kind: "ADVANCE", dedupeKey: `adv:item:${i.id}:${settings.advanceMinutes}`, scheduledFor: new Date(i.startAt.getTime() - lead), channels,
+        title: `Starts in ${settings.advanceMinutes} minutes: ${i.title}`, body: `${localTimeOf(i.startAt, settings.timezone)} · ${i.minutes} min`,
       });
       if (ok) created += 1;
     }

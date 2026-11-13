@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { WEEKLY_SCHEDULE } from "@/lib/departments";
 import { dateToISO, isoToDate, levelFromXp, toEnum, toLabel } from "@/lib/programme";
 import { earnedMission } from "./earned";
+import { isPlanLinked } from "@/lib/plan/guards";
 import { createMissionSchema, milestoneSchema, type CreateMissionInput } from "./schema";
 
 /** Mission shape used by the UI. Mirrors the Base44 Mission entity so the original components keep working. */
@@ -109,6 +110,7 @@ export async function setMissionDone(userId: string, learnerMissionId: string, d
       include: { mission: true },
     });
     if (!lm) return false;
+    if (await isPlanLinked(userId, lm.id, tx)) return false; // plan work is completed through evidence and assessment, not the board checkbox
 
     const wasDone = COUNTS_AS_DONE.includes(lm.status);
     if (lm.status === "PASSED" && !done) return false; // an assessed pass cannot be undone from the board
@@ -186,6 +188,7 @@ export async function deleteMission(userId: string, learnerMissionId: string): P
       include: { mission: true },
     });
     if (!lm) return false;
+    if (await isPlanLinked(userId, lm.id, tx)) return false; // part of the learner's plan: it cannot be deleted from the board
     // Submitted and assessed work is history: deleting the mission would cascade away the learner's submissions,
     // evidence links and assessments. Refuse (the board only offers delete for self-made tasks, which cannot have any).
     if ((await tx.submission.count({ where: { learnerMissionId: lm.id, userId } })) > 0) return false;

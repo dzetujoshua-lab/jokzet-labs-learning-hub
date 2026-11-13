@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { ADVANCE_CHOICES } from "./constants";
 import { generateInstances, recomputeFutureDueTimes } from "./daily";
+import { recomputePlanItemInstants } from "@/lib/plan/service";
 import { isValidTimezone } from "./time";
 
 
@@ -30,6 +31,7 @@ export async function updateSettings(userId: string, input: SettingsInput, now: 
   if (!before || before.timezone !== data.timezone || before.reminderTime !== data.reminderTime) {
     await generateInstances(userId, now); // new timezone can change "today"
     await recomputeFutureDueTimes(userId, now);
+    await recomputePlanItemInstants(userId, data.timezone, now); // plan sessions follow the learner's time zone
   }
   return { ok: true };
 }

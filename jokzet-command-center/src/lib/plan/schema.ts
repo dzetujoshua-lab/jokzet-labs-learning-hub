@@ -35,6 +35,13 @@ const goal = z.object({
   note: z.string().trim().max(NOTE_MAX).optional().default(""),
 });
 
+export const goalsSchema = z.array(goal).min(1, "Choose at least one subject.").max(MAX_GOALS, `Choose at most ${MAX_GOALS} subjects.`).superRefine((goals, ctx) => {
+  if (new Set(goals.map((g) => g.departmentCode)).size !== goals.length) ctx.addIssue({ code: "custom", message: "Each subject can be chosen once." });
+  const secrets = detectSecrets(goals.map((g) => g.note ?? "").join(" | "));
+  if (secrets.length) ctx.addIssue({ code: "custom", message: secretMessage(secrets) });
+});
+export type GoalsInput = z.input<typeof goalsSchema>;
+
 /** What the onboarding wizard collects. The server validates all of it again; nothing from the client is trusted. */
 export const onboardingSchema = z
   .object({
