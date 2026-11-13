@@ -15,6 +15,8 @@ datasource db {
 enum UserRole {
   LEARNER
   ADMIN
+  AUTHOR
+  REVIEWER
 }
 
 /// Who produced an assessment. HUMAN and AUTOMATED are used from the human-review phase; every existing row is SELF.
@@ -85,6 +87,39 @@ enum ApprovalStatus {
   APPROVED
   REJECTED
   ARCHIVED
+}
+
+/// A reviewer's verdict on a learner's self-assessment.
+enum ReviewDecision {
+  CONFIRM // the self-assessment is right
+  ADJUST // the reviewer scored it differently (per-criterion points recorded)
+  REJECT // the work is not accepted
+}
+
+enum ReviewRequestStatus {
+  OPEN
+  CLAIMED
+  DONE
+  CANCELLED
+}
+
+enum CompetencyLevel {
+  NONE
+  BASIC
+  WORKING
+  STRONG
+}
+
+enum CompetencySource {
+  BASELINE
+  ASSESSED
+}
+
+enum RoleAuditAction {
+  GRANTED
+  REVOKED
+  SCOPE_ADDED
+  SCOPE_REMOVED
 }
 
 enum MissionPhase {
@@ -259,6 +294,12 @@ model User {
   bosExpenses             BosExpense[]
   activityRecommendations ActivityRecommendation[]
   resourceEngagements     ResourceEngagement[]
+  reviewRequests          ReviewRequest[]           @relation("RequestLearner")
+  claimedReviews          ReviewRequest[]           @relation("RequestClaimer")
+  givenReviews            AssessmentReview[]        @relation("Reviewer")
+  reviewsOfMyWork         AssessmentReview[]        @relation("ReviewedLearner")
+  reviewerScopes          ReviewerScope[]
+  skillCompetencies       SkillCompetency[]
 }
 
 model Session {
@@ -301,13 +342,14 @@ model Department {
   color     String
   sortOrder Int
 
-  learningPaths LearningPath[]
-  skills        Skill[]
-  missions      Mission[]
-  progress      LearnerDepartment[]
-  portfolio     PortfolioProject[]
-  milestones    CapstoneMilestone[]
-  evidence      EvidenceItem[]
+  learningPaths  LearningPath[]
+  skills         Skill[]
+  reviewerScopes ReviewerScope[]
+  missions       Mission[]
+  progress       LearnerDepartment[]
+  portfolio      PortfolioProject[]
+  milestones     CapstoneMilestone[]
+  evidence       EvidenceItem[]
 }
 
 model LearningPath {
@@ -344,10 +386,11 @@ model Skill {
   name         String
   description  String?
 
-  department Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  level      Level?         @relation(fields: [levelId], references: [id], onDelete: SetNull)
-  learners   UserSkill[]
-  missions   MissionSkill[]
+  department   Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  level        Level?            @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  learners     UserSkill[]
+  competencies SkillCompetency[]
+  missions     MissionSkill[]
 
   @@unique([departmentId, name])
   @@index([levelId])
@@ -551,12 +594,15 @@ model Assessment {
   weaknesses    String[] // tags used for weakness tracking
   assessedAt    DateTime          @default(now())
 
-  user       User              @relation("AssessmentLearner", fields: [userId], references: [id], onDelete: Cascade)
-  assessor   User?             @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: SetNull)
-  submission Submission        @relation(fields: [submissionId], references: [id], onDelete: NoAction)
-  rubric     AssessmentRubric  @relation(fields: [rubricId], references: [id])
-  scores     AssessmentScore[]
-  feedback   Feedback[]
+  user          User               @relation("AssessmentLearner", fields: [userId], references: [id], onDelete: Cascade)
+  assessor      User?              @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: SetNull)
+  submission    Submission         @relation(fields: [submissionId], references: [id], onDelete: NoAction)
+  rubric        AssessmentRubric   @relation(fields: [rubricId], references: [id])
+  scores        AssessmentScore[]
+  reviewRequest ReviewRequest?
+  reviews       AssessmentReview[]
+  competencies  SkillCompetency[]
+  feedback      Feedback[]
 
   @@index([userId, assessedAt])
 }
@@ -1164,4 +1210,123 @@ model ResourceEngagement {
 
   @@id([userId, resourceId])
   @@index([resourceId])
+}
+
+// ─────────────── Human review (verification) ───────────────
+/// Which departments a REVIEWER may review. ADMIN reviews every department and needs no scope.
+model ReviewerScope {
+  userId       String
+  departmentId String
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, departmentId])
+}
+
+/// The review queue: one request per assessment. A learner asks for their self-assessment to be verified.
+model ReviewRequest {
+  id           String              @id @default(cuid())
+  assessmentId String              @unique
+  userId       String // the learner who owns the work
+  status       ReviewRequestStatus @default(OPEN)
+  claimedById  String?
+  createdAt    DateTime            @default(now())
+  claimedAt    DateTime?
+  closedAt     DateTime?
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: NoAction)
+  user       User       @relation("RequestLearner", fields: [userId], references: [id], onDelete: Cascade)
+  claimedBy  User?      @relation("RequestClaimer", fields: [claimedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+/// A reviewer's verdict. Append-only history: the learner's own self-assessment is never overwritten, and the effective
+/// (verified) result is the latest review. `reviewerLabel` is a snapshot so the audit trail survives an account deletion.
+model AssessmentReview {
+  id            String            @id @default(cuid())
+  assessmentId  String
+  userId        String // the learner
+  reviewerId    String?
+  reviewerLabel String
+  decision      ReviewDecision
+  reason        String? // required for ADJUST and REJECT
+  rubricVersion Int
+  totalPoints   Int
+  maxPoints     Int
+  percentage    Int
+  outcome       AssessmentOutcome
+  createdAt     DateTime          @default(now())
+
+  learner    User                    @relation("ReviewedLearner", fields: [userId], references: [id], onDelete: Cascade)
+  assessment Assessment              @relation(fields: [assessmentId], references: [id], onDelete: NoAction)
+  reviewer   User?                   @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  scores     AssessmentReviewScore[]
+
+  @@index([assessmentId, createdAt])
+  @@index([userId])
+}
+
+model AssessmentReviewScore {
+  reviewId      String
+  criterionId   String
+  points        Int
+  comment       String?
+  criterionName String
+  maxPoints     Int
+
+  review AssessmentReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, criterionId])
+}
+
+/// Every time a reviewer opens a learner's evidence. Plain identifiers (no foreign keys) so the log outlives the evidence.
+model EvidenceAccessLog {
+  id              String   @id @default(cuid())
+  evidenceId      String
+  reviewerId      String?
+  reviewRequestId String
+  learnerId       String
+  action          String // VIEW_FILE
+  at              DateTime @default(now())
+
+  @@index([evidenceId])
+  @@index([reviewerId, at])
+  @@index([learnerId, at])
+}
+
+/// What a learner has demonstrated, by skill. Created ONLY from a verified assessment (source ASSESSED); baseline results
+/// (Phase 6) are advisory. Separate from UserSkill, which records self-assessed or verified credit.
+model SkillCompetency {
+  id           String           @id @default(cuid())
+  userId       String
+  skillId      String
+  level        CompetencyLevel
+  source       CompetencySource
+  assessmentId String?
+  updatedAt    DateTime         @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill      Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  assessment Assessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, skillId])
+}
+
+/// Every grant or revocation of a role or reviewer scope. Written by the role script, never by an app endpoint.
+model RoleAudit {
+  id             String          @id @default(cuid())
+  targetUserId   String
+  targetEmail    String
+  action         RoleAuditAction
+  role           String?
+  departmentCode String?
+  actor          String // e.g. "cli:<os user>"
+  note           String?
+  at             DateTime        @default(now())
+
+  @@index([targetUserId, at])
 }
