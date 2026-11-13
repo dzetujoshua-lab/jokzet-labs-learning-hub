@@ -75,6 +75,7 @@ async function main() {
           durationMinutes: m.minutes,
           kind: m.kind as never,
           evidenceType: m.evidence as never,
+          role: m.role ?? ("LESSON" as const),
           xpReward: m.xp,
           requiredTools: m.tools,
           experimentChallenge: m.experiment,

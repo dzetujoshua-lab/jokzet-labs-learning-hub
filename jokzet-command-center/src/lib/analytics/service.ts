@@ -2,6 +2,7 @@ import { addDays } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { db } from "@/lib/db";
 import { PROGRAMME_TIMEZONE } from "@/lib/departments";
+import { earnedMission } from "@/lib/missions/earned";
 import { dateToISO, isoToDate, isoWeekStart, todayISO } from "@/lib/programme";
 
 export type Activity = { at: Date; minutes: number };
@@ -58,7 +59,7 @@ export async function getAnalytics(userId: string, now: Date = new Date()): Prom
   const [missions, practiceRows, daily, assessments, skills, learnerDepts, curriculumTotals] = await Promise.all([
     // Curriculum missions only: personal activities and recommended challenges are practice and are reported separately.
     db.learnerMission.findMany({
-      where: { userId, status: { in: ["COMPLETED", "PASSED"] }, completedAt: { not: null }, mission: { category: "CURRICULUM_MISSION" } },
+      where: { userId, status: { in: ["COMPLETED", "PASSED"] }, completedAt: { not: null }, mission: { category: "CURRICULUM_MISSION", ...earnedMission } },
       select: { completedAt: true, minutesSpent: true, mission: { select: { durationMinutes: true, department: { select: { code: true } } } } },
     }),
     db.learnerMission.findMany({
@@ -70,13 +71,13 @@ export async function getAnalytics(userId: string, now: Date = new Date()): Prom
       select: { status: true, completedAt: true, template: { select: { durationMinutes: true } } },
     }),
     db.assessment.findMany({
-      where: { userId, rubric: { mission: { category: "CURRICULUM_MISSION" } } },
+      where: { userId, rubric: { mission: { category: "CURRICULUM_MISSION", ...earnedMission } } },
       orderBy: { assessedAt: "asc" },
       select: { id: true, percentage: true, outcome: true, assessedAt: true, rubric: { select: { mission: { select: { title: true, department: { select: { code: true } } } } } } },
     }),
     db.userSkill.findMany({ where: { userId }, select: { earnedAt: true, skill: { select: { department: { select: { code: true } } } } } }),
     db.learnerDepartment.findMany({ where: { userId }, select: { xp: true, level: true, department: { select: { code: true, name: true, sortOrder: true } } } }),
-    db.mission.groupBy({ by: ["departmentId"], where: { createdById: null, isPublished: true }, _count: { _all: true } }),
+    db.mission.groupBy({ by: ["departmentId"], where: { createdById: null, isPublished: true, ...earnedMission }, _count: { _all: true } }),
   ]);
   const deptCodeById = new Map((await db.department.findMany({ select: { id: true, code: true } })).map((d) => [d.id, d.code]));
 

@@ -3,6 +3,7 @@ import type { AssessmentOutcome } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { detectSecrets, secretMessage } from "@/lib/evidence/secrets";
 import { adjustDepartmentXp } from "@/lib/missions/service";
+import { recordBaselineResult } from "@/lib/plan/onboarding";
 import { dateToISO } from "@/lib/programme";
 
 /** A criterion scoring below this share of its points counts as a weakness and generates a correction. */
@@ -111,7 +112,8 @@ export async function assessSubmission(userId: string, submissionId: string, inp
       // Only curriculum missions earn XP and skills. A personal activity or recommended challenge is practice the learner
       // chose to do: it is assessed and recorded (and can be shown in the portfolio), but it never earns XP, never earns
       // curriculum skills and never stands in for a mandatory mission.
-      const earnsCredit = mission.category === "CURRICULUM_MISSION";
+      // A baseline is a placement exercise: it is recorded (and advises placement) but never earns anything.
+      const earnsCredit = mission.category === "CURRICULUM_MISSION" && mission.role !== "BASELINE";
       if (earnsCredit && lm.xpAwarded === 0) {
         xpAwarded = mission.xpReward;
         await tx.learnerMission.update({ where: { id: lm.id }, data: { xpAwarded } });
@@ -124,6 +126,8 @@ export async function assessSubmission(userId: string, submissionId: string, inp
     } else {
       await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "NEEDS_REVISION" } });
     }
+
+    if (mission.role === "BASELINE") await recordBaselineResult(tx, userId, lm.id, percentage);
 
     await tx.activityRecord.create({
       data: {

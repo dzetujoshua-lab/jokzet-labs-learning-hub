@@ -5,6 +5,8 @@
  */
 export type MissionSpec = {
   code: string;
+  /** LESSON (default), BASELINE (placement only: xp 0, no skills) or CHECKPOINT. */
+  role?: "LESSON" | "BASELINE" | "CHECKPOINT";
   title: string;
   objective: string;
   minutes: number;
