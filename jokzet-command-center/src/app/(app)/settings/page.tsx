@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DeleteAccountForm } from "@/components/settings/delete-account-form";
 import { BrowserNotifications } from "@/components/settings/browser-notifications";
 import { ReminderSettingsForm } from "@/components/settings/reminder-settings-form";
 import { ScheduleImporter } from "@/components/settings/schedule-importer";
@@ -93,6 +94,15 @@ export default async function SettingsPage() {
         <a href="/api/account/export" download className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted">
           Download my data (JSON)
         </a>
+      </section>
+
+      <section className="panel border-destructive/40 p-5 md:p-6" aria-labelledby="delete-account">
+        <p className="mono-label">Danger zone</p>
+        <h2 id="delete-account" className="mt-2 font-display text-lg font-medium text-foreground">Delete my account</h2>
+        <p className="mt-2 max-w-prose text-[13px] text-muted-foreground">
+          This permanently deletes your account and everything linked to it: your profile, missions, submissions, assessments, plans, reminders, portfolio, evidence and uploaded files. It cannot be undone. Download a copy of your data first if you want to keep it.
+        </p>
+        <DeleteAccountForm />
       </section>
     </div>
   );

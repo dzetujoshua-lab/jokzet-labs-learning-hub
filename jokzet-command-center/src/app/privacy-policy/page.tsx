@@ -199,11 +199,12 @@ export default function PrivacyPolicyPage() {
               "Sign-in sessions expire after 14 days without use (and are renewed while you keep using the platform). Signing out ends the session straight away.",
               "Your account information, progress, submissions, assessments and portfolio are kept for as long as your account exists.",
               "You can delete evidence that is not attached to a submitted mission, and the uploaded file is removed from storage with it. Work you have submitted and its assessment are kept as part of your learning record.",
-              "To have your account deleted together with the data linked to it, contact us (see Contact information). We delete an account and its linked records together.",
+              "You can delete your account yourself in Settings (you confirm with your password). This permanently removes your account and the data linked to it, including uploaded files, and signs you out everywhere. It cannot be undone, so download a copy of your data first if you want one.",
+              "If you review other learners&rsquo; work, the verdicts you gave stay with those learners but no longer carry your name. A role-change audit entry keeps its history without your email address.",
               "After deletion, copies can remain for a short time in the database provider&rsquo;s backup history before they expire.",
             ]}
           />
-          <p>You can download a copy of your data from Settings. The platform does not yet have a self-service button to delete your whole account; that is handled by contacting us.</p>
+          <p>You can download a copy of your data and delete your account from Settings. If you cannot sign in, contact us and we will help.</p>
         </Section>
 
         <Section id="revoking-google-access" n={10} title="Revoking Google account access">
@@ -216,7 +217,7 @@ export default function PrivacyPolicyPage() {
 
         <Section id="your-rights" n={11} title="Your rights">
           <p>In the platform you can:</p>
-          <List items={["see all of your own information, change your profile and settings, and download a copy of your data from Settings;", "delete evidence that is not part of a submitted mission;", "turn notifications on or off and manage your reminders;", "sign out at any time."]} />
+          <List items={["see all of your own information, change your profile and settings, and download a copy of your data from Settings, and delete your whole account;", "delete evidence that is not part of a submitted mission;", "turn notifications on or off and manage your reminders;", "sign out at any time."]} />
           <p>You can also contact us to correct your information, to delete your account, or to raise a concern about how it is handled. Depending on where you live, you may have further rights under data-protection law, including the right to complain to your local data-protection authority. In Ghana that is the{" "}
             <Ext href={LEGAL.authorityUrl}>{LEGAL.authorityName}</Ext>.</p>
         </Section>

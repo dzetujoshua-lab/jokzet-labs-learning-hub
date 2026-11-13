@@ -103,6 +103,7 @@ export const LIMITS = {
   reviewRequestUser: { limit: 20, windowSeconds: 24 * 60 * 60 }, // asking for reviews
   reviewActionReviewer: { limit: 240, windowSeconds: 60 * 60 }, // claiming and completing reviews
   resourceEngagementUser: { limit: 60, windowSeconds: 60 }, // advisory resource interactions
+  deleteAccountUser: { limit: 5, windowSeconds: 60 * 60 }, // every attempt, so the password cannot be guessed through this form
   exportUser: { limit: 5, windowSeconds: 60 * 60 }, // downloading a personal-data export
   planGenerate: { limit: 20, windowSeconds: 60 * 60 }, // generating or regenerating a plan
   planMove: { limit: 60, windowSeconds: 60 * 60 }, // moving single sessions
