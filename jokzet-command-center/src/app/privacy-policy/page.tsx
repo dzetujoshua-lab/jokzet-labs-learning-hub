@@ -203,7 +203,7 @@ export default function PrivacyPolicyPage() {
               "After deletion, copies can remain for a short time in the database provider&rsquo;s backup history before they expire.",
             ]}
           />
-          <p>The platform does not yet have a self-service button to delete your whole account or to download a copy of your data; both are handled by contacting us.</p>
+          <p>You can download a copy of your data from Settings. The platform does not yet have a self-service button to delete your whole account; that is handled by contacting us.</p>
         </Section>
 
         <Section id="revoking-google-access" n={10} title="Revoking Google account access">
@@ -216,8 +216,8 @@ export default function PrivacyPolicyPage() {
 
         <Section id="your-rights" n={11} title="Your rights">
           <p>In the platform you can:</p>
-          <List items={["see all of your own information, and change your profile and settings;", "delete evidence that is not part of a submitted mission;", "turn notifications on or off and manage your reminders;", "sign out at any time."]} />
-          <p>You can also contact us to ask for a copy of your information, to correct it, to delete your account, or to raise a concern about how it is handled. Depending on where you live, you may have further rights under data-protection law, including the right to complain to your local data-protection authority. In Ghana that is the{" "}
+          <List items={["see all of your own information, change your profile and settings, and download a copy of your data from Settings;", "delete evidence that is not part of a submitted mission;", "turn notifications on or off and manage your reminders;", "sign out at any time."]} />
+          <p>You can also contact us to correct your information, to delete your account, or to raise a concern about how it is handled. Depending on where you live, you may have further rights under data-protection law, including the right to complain to your local data-protection authority. In Ghana that is the{" "}
             <Ext href={LEGAL.authorityUrl}>{LEGAL.authorityName}</Ext>.</p>
         </Section>
 
