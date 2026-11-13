@@ -40,7 +40,11 @@ export function missionProblems(m: MissionSpec): string[] {
   if (blank(m.show)) at("missing SHOW deliverable");
   if (blank(m.remediation)) at("missing remediation advice");
 
-  if (!m.skills.length) at("at least one skill is required");
+  if (m.role === "BASELINE") {
+    // A baseline is placement only: it can never carry XP or skills, so it can never be mistaken for earned work.
+    if (m.xp !== 0) at("a baseline mission must have xp 0");
+    if (m.skills.length) at("a baseline mission must not teach skills");
+  } else if (!m.skills.length) at("at least one skill is required");
   if (new Set(m.skills).size !== m.skills.length) at("skills list has duplicates");
 
   // Rubric: complete, positive, totalling exactly 100.

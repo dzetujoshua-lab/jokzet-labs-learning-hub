@@ -1,6 +1,7 @@
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { PROGRAMME_START } from "@/lib/departments";
+import { personalisedLearningEnabled } from "@/lib/plan/flag";
 import { scheduleLevelZero } from "@/lib/missions/service";
 import { isoToDate } from "@/lib/programme";
 import { LIMITS, bucketKey, rateLimitHit, rateLimitPeek, rateLimitReset } from "@/lib/ratelimit";
@@ -9,23 +10,32 @@ import type { LoginInput, RegisterInput } from "./validation";
 
 export type AuthResult = { ok: true; userId: string } | { ok: false; error: "EMAIL_TAKEN" | "INVALID_CREDENTIALS" };
 
-/** Creates the user, profile and a Level 0 record for every department in one transaction. */
+/**
+ * Creates the user, profile and a progress record for every department in one transaction. While the personalised-learning
+ * flag is off (the default) every new account gets the original programme (LEGACY, onboarding COMPLETE, Level 0 scheduled).
+ * With the flag on, a new account is PERSONALISED, starts onboarding and is not given the fixed schedule.
+ */
 export async function registerUser(input: RegisterInput): Promise<AuthResult> {
   const passwordHash = await hashPassword(input.password);
+  const personalised = personalisedLearningEnabled();
   try {
     const user = await db.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
           email: input.email,
           passwordHash,
-          profile: { create: { displayName: input.displayName } },
+          profile: {
+            create: personalised
+              ? { displayName: input.displayName, learnerMode: "PERSONALISED", onboardingStatus: "NOT_STARTED" }
+              : { displayName: input.displayName, learnerMode: "LEGACY", onboardingStatus: "COMPLETE" },
+          },
         },
       });
       const departments = await tx.department.findMany({ select: { id: true } });
       await tx.learnerDepartment.createMany({
         data: departments.map((d) => ({ userId: created.id, departmentId: d.id, level: 0, xp: 0 })),
       });
-      await scheduleLevelZero(tx, created.id, isoToDate(PROGRAMME_START));
+      if (!personalised) await scheduleLevelZero(tx, created.id, isoToDate(PROGRAMME_START));
       return created;
     });
     return { ok: true, userId: user.id };

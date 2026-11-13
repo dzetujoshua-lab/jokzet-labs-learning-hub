@@ -3,6 +3,7 @@ import type { LearnerMissionStatus, Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { WEEKLY_SCHEDULE } from "@/lib/departments";
 import { dateToISO, isoToDate, levelFromXp, toEnum, toLabel } from "@/lib/programme";
+import { earnedMission } from "./earned";
 import { createMissionSchema, milestoneSchema, type CreateMissionInput } from "./schema";
 
 /** Mission shape used by the UI. Mirrors the Base44 Mission entity so the original components keep working. */
@@ -67,7 +68,7 @@ const missionInclude = { mission: { include: { department: { select: { code: tru
 
 export async function listMissions(userId: string): Promise<MissionView[]> {
   const rows = await db.learnerMission.findMany({
-    where: { userId },
+    where: { userId, mission: earnedMission }, // baselines are not part of the mission board
     include: missionInclude,
     orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }],
   });
@@ -211,7 +212,7 @@ export async function saveNextMilestone(userId: string, departmentId: string, te
  */
 export async function scheduleLevelZero(tx: Prisma.TransactionClient, userId: string, programmeStart: Date) {
   const missions = await tx.mission.findMany({
-    where: { createdById: null, isPublished: true, level: { number: 0 } },
+    where: { createdById: null, isPublished: true, role: "LESSON", level: { number: 0 } },
     include: { department: { select: { code: true } } },
     orderBy: [{ departmentId: "asc" }, { sortOrder: "asc" }],
   });
@@ -253,9 +254,11 @@ export async function ensureLearnerSetup(userId: string): Promise<void> {
     db.department.findMany({ select: { id: true } }),
     db.learnerDepartment.count({ where: { userId } }),
     db.learnerMission.count({ where: { userId, mission: { createdById: null } } }),
-    db.profile.findUnique({ where: { userId }, select: { programmeStart: true } }),
+    db.profile.findUnique({ where: { userId }, select: { programmeStart: true, learnerMode: true } }),
   ]);
-  if (existing >= departments.length && scheduled > 0) return;
+  // A personalised learner is never given the fixed Level 0 schedule (their plan decides what they study).
+  const personalised = profile?.learnerMode === "PERSONALISED";
+  if (existing >= departments.length && (scheduled > 0 || personalised)) return;
   await db.$transaction(async (tx) => {
     if (existing < departments.length) {
       await tx.learnerDepartment.createMany({
@@ -263,7 +266,7 @@ export async function ensureLearnerSetup(userId: string): Promise<void> {
         skipDuplicates: true,
       });
     }
-    if (scheduled === 0) {
+    if (scheduled === 0 && !personalised) {
       await scheduleLevelZero(tx, userId, profile?.programmeStart ?? isoToDate("2026-11-16"));
     }
   });

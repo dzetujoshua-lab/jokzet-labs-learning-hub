@@ -49,8 +49,9 @@ export async function requestReview(userId: string, assessmentId: string): Promi
   const limit = await rateLimitHit(bucketKey("review:request", userId), LIMITS.reviewRequestUser);
   if (!limit.ok) return fail("You have asked for several reviews recently. Please try again later.");
   return db.$transaction(async (tx) => {
-    const assessment = await tx.assessment.findFirst({ where: { id: assessmentId, userId }, include: { reviewRequest: true } });
+    const assessment = await tx.assessment.findFirst({ where: { id: assessmentId, userId }, include: { reviewRequest: true, rubric: { select: { mission: { select: { role: true } } } } } });
     if (!assessment) return fail("Assessment not found.");
+    if (assessment.rubric.mission.role === "BASELINE") return fail("A baseline is a placement exercise and is not reviewed.");
     if (assessment.status !== "SELF_RECORDED") {
       return fail(assessment.status === "PENDING_REVIEW" ? "A review has already been requested." : "This assessment has already been reviewed.");
     }
@@ -269,7 +270,7 @@ export async function completeReview(actor: Actor, requestId: string, input: Com
         where: { id: a.submission.learnerMissionId },
         include: { mission: { include: { skills: true } } },
       });
-      const credited = lm.mission.category === "CURRICULUM_MISSION";
+      const credited = lm.mission.category === "CURRICULUM_MISSION" && lm.mission.role !== "BASELINE";
 
       // Work out the verified result.
       let totalPoints = a.totalPoints;

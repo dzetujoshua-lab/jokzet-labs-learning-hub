@@ -3,6 +3,7 @@ import type { ReminderView } from "@/components/dashboard/reminder-rail";
 import { db } from "@/lib/db";
 import { formatInTimeZone } from "date-fns-tz";
 import { PROGRAMME_TIMEZONE } from "@/lib/departments";
+import { earnedMission } from "@/lib/missions/earned";
 import { ensureLearnerSetup, listDepartments, listMissions } from "@/lib/missions/service";
 import { generateInstances, listToday, listUpcoming, reconcileMissed } from "@/lib/schedule/daily";
 
@@ -15,7 +16,7 @@ export async function getDashboardData(userId: string) {
     listDepartments(userId),
     listMissions(userId),
     db.evidenceItem.count({ where: { userId } }),
-    db.assessment.count({ where: { userId, outcome: "PASS", rubric: { mission: { category: "CURRICULUM_MISSION" } } } }), // curriculum only: practice activities are listed separately
+    db.assessment.count({ where: { userId, outcome: "PASS", rubric: { mission: { category: "CURRICULUM_MISSION", ...earnedMission } } } }), // curriculum only, baselines excluded: practice activities are listed separately
     db.reminder.findMany({ where: { userId, status: "SCHEDULED" }, orderBy: { remindAt: "asc" }, take: 20 }),
     db.capstoneProject.findFirst({
       where: { userId },

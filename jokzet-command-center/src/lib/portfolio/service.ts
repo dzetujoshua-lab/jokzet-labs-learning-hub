@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ProjectStatus } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { DEPARTMENTS } from "@/lib/departments";
+import { earnedMission } from "@/lib/missions/earned";
 import { detectSecretInUrl, detectSecrets, secretMessage } from "@/lib/evidence/secrets";
 import { dateToISO } from "@/lib/programme";
 
@@ -194,7 +195,7 @@ export type Suggestion = { missionCode: string; title: string; departmentCode: s
 /** Passed missions that are not yet in the portfolio: one click turns them into a shipped piece. */
 export async function listSuggestions(userId: string): Promise<Suggestion[]> {
   const passed = await db.learnerMission.findMany({
-    where: { userId, status: "PASSED", mission: { createdById: null, code: { not: null } } },
+    where: { userId, status: "PASSED", mission: { createdById: null, code: { not: null }, ...earnedMission } },
     include: { mission: { select: { id: true, code: true, title: true, department: { select: { code: true } } } } },
     orderBy: { completedAt: "desc" },
   });
@@ -217,7 +218,7 @@ export async function listSuggestions(userId: string): Promise<Suggestion[]> {
 /** Adds a passed mission to the portfolio as a shipped piece, using the evidence and links from its passing attempt. */
 export async function addFromMission(userId: string, missionCode: string): Promise<Result<{ id: string }>> {
   const lm = await db.learnerMission.findFirst({
-    where: { userId, status: "PASSED", mission: { code: missionCode, createdById: null } },
+    where: { userId, status: "PASSED", mission: { code: missionCode, createdById: null, ...earnedMission } },
     include: { mission: { include: { department: { select: { id: true } } } } },
   });
   if (!lm) return { ok: false, error: "Only missions you have passed can be added." };
