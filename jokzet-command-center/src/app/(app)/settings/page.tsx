@@ -83,6 +83,17 @@ export default async function SettingsPage() {
           <p className="text-sm text-muted-foreground">Import a schedule first. Reminder settings appear once a schedule exists.</p>
         </section>
       )}
+
+      <section className="panel p-5 md:p-6" aria-labelledby="your-data">
+        <p className="mono-label">Your data</p>
+        <h2 id="your-data" className="mt-2 font-display text-lg font-medium text-foreground">Download a copy of your data</h2>
+        <p className="mt-2 max-w-prose text-[13px] text-muted-foreground">
+          Get everything this platform holds about you as one JSON file: your profile, missions, submissions, assessments, plans, reminders and more. It leaves out your password, sign-in tokens and the contents of uploaded files. You can download it up to five times an hour.
+        </p>
+        <a href="/api/account/export" download className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-muted">
+          Download my data (JSON)
+        </a>
+      </section>
     </div>
   );
 }
