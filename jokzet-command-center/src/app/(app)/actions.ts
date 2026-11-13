@@ -23,6 +23,7 @@ import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import {
   acceptRecommendation, attachRubricTemplate, createPersonalActivity, dismissRecommendation, startActivity, type ActivityInput,
 } from "@/lib/activities/service";
+import { recordEngagement, type EngagementEvent } from "@/lib/resources/service";
 import { setChannelFlag, updateSettings, type SettingsInput, type SettingsResult } from "@/lib/schedule/settings";
 
 const idSchema = z.string().min(1).max(64);
@@ -331,4 +332,12 @@ export async function dismissRecommendationAction(recommendationId: string): Pro
   const ok = await dismissRecommendation(user.id, idSchema.parse(recommendationId));
   refresh();
   return ok ? { ok: true } : { ok: false, error: "This challenge is no longer available." };
+}
+
+// ── WATCH resources (advisory engagement) ──
+
+export async function recordEngagementAction(input: { resourceId: string; event: EngagementEvent; progressPct?: number }): Promise<Done> {
+  const user = await requireUser();
+  const result = await recordEngagement(user.id, input);
+  return result.ok ? { ok: true } : { ok: false, error: result.error }; // no revalidation: this never changes anything the page shows as progress
 }

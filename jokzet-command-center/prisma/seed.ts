@@ -5,6 +5,9 @@ import { DEPARTMENTS } from "../src/lib/departments";
 import { LEVEL0, PASSING_SCORE } from "./curriculum/level0";
 import { archiveRetired, ensurePlaceholderResource, syncRubric } from "./curriculum/sync";
 import { assertValidCurriculum } from "./curriculum/validate";
+import { assertValidResources } from "./curriculum/resource-validate";
+import { syncResourceCatalogue } from "./curriculum/resource-sync";
+import { MISSION_RESOURCES, RESOURCES } from "./curriculum/resources";
 
 /**
  * Idempotent and NON-DESTRUCTIVE seed: safe to run repeatedly and on a database that already holds learner data.
@@ -22,6 +25,7 @@ async function main() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not set");
   assertValidCurriculum(LEVEL0);
+  assertValidResources(RESOURCES, MISSION_RESOURCES, new Set(LEVEL0.flatMap((spec) => spec.missions.map((m) => m.code))));
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   let rubricBumps = 0;
 
@@ -128,13 +132,16 @@ async function main() {
     const codes = LEVEL0.flatMap((spec) => spec.missions.map((m) => m.code));
     const archived = { count: await archiveRetired(prisma, codes) };
 
+    // Approved WATCH resources (content-as-code). The catalogue file is empty until a reviewer has verified real links.
+    const catalogue = await syncResourceCatalogue(prisma, RESOURCES, MISSION_RESOURCES);
+
     const [departments, levels, skills, missions] = await Promise.all([
       prisma.department.count(),
       prisma.level.count(),
       prisma.skill.count(),
       prisma.mission.count({ where: { createdById: null } }),
     ]);
-    console.log(`Seed complete: ${departments} departments, ${levels} levels, ${skills} skills, ${missions} curriculum missions (${missionCount} upserted, ${rubricBumps} rubric version bump(s), ${archived.count} archived).`);
+    console.log(`Seed complete: ${departments} departments, ${levels} levels, ${skills} skills, ${missions} curriculum missions (${missionCount} upserted, ${rubricBumps} rubric version bump(s), ${archived.count} archived; resource catalogue: ${catalogue.resources} resources, ${catalogue.links} links, ${catalogue.archived} archived).`);
   } finally {
     await prisma.$disconnect();
   }
