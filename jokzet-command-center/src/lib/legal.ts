@@ -14,8 +14,18 @@ export const LEGAL = {
 
   /** NOT PROVIDED YET: the legal name of whoever operates the platform (person or company). */
   operatorLegalName: null as string | null,
-  /** NOT PROVIDED YET: the email address people should use for privacy questions and requests. */
-  privacyContactEmail: null as string | null,
+  /**
+   * Privacy contact supplied by the owner. Override with PRIVACY_CONTACT_EMAIL. It is published as the contact address;
+   * the page does not claim the mailbox has been verified.
+   */
+  privacyContactEmail: (process.env.PRIVACY_CONTACT_EMAIL?.trim() || "jokzetlabs.privacy@gmail.com") as string | null,
+  /** Country the platform is operated from (provided by the owner). */
+  country: "Ghana",
+  /** Provided by the owner: an independently operated brand, not a registered company. */
+  businessStatus: "an independently operated brand; it is not currently a registered company",
+  /** Data-protection authority the owner named. */
+  authorityName: "Ghana Data Protection Commission",
+  authorityUrl: "https://dpc.gov.gh/",
   /** NOT PROVIDED YET: a postal address, if one should be published. */
   postalAddress: null as string | null,
 } as const;
