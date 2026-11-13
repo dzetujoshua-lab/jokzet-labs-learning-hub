@@ -1,6 +1,7 @@
 import { fmtDate } from "@/lib/programme";
 import type { Timetable } from "@/lib/plan/timetable-service";
 import { Bar, StateChip, Tile, deptColor, deptName, dotColor } from "./parts";
+import { MoveSession } from "./move-session";
 
 /** One day: its sessions in order, with this week's progress, the next checkpoint and the finish estimate beside them. */
 export function DayView({ t }: { t: Timetable }) {
@@ -26,6 +27,9 @@ export function DayView({ t }: { t: Timetable }) {
                   </p>
                 </div>
                 <StateChip item={i} />
+                {t.moveOptions[i.id] ? (
+                  <MoveSession itemId={i.id} title={i.title} current={`${fmtDate(i.date)}, ${i.time}`} options={t.moveOptions[i.id].map((o) => ({ ...o, label: fmtDate(o.date) }))} />
+                ) : null}
               </li>
             ))}
           </ul>

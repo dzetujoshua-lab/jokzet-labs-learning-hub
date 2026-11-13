@@ -1516,6 +1516,9 @@ enum PlanEventType {
   SUBJECTS_CHANGED
   ITEMS_RELEASED
   COMPLETED
+  RESCHEDULED // one session moved by the learner
+  AVAILABILITY_CHANGED // a new plan version built from new study days or hours
+  PREFERENCES_CHANGED // flexibility or automatic-rescheduling choice changed
 }
 
 model LearningPlanPhase {
@@ -1579,15 +1582,21 @@ model LearningPlanItem {
 
 /// Append-only history of what happened to a plan.
 model LearningPlanEvent {
-  id         String        @id @default(cuid())
-  planId     String
-  userId     String
-  itemId     String?
-  type       PlanEventType
-  fromDate   DateTime?     @db.Date
-  toDate     DateTime?     @db.Date
-  note       String?
-  occurredAt DateTime      @default(now())
+  id            String        @id @default(cuid())
+  planId        String
+  userId        String
+  itemId        String?
+  type          PlanEventType
+  fromDate      DateTime?     @db.Date
+  toDate        DateTime?     @db.Date
+  note          String?
+  actor         String        @default("SYSTEM") // LEARNER (they did it) or SYSTEM (the Academy did it)
+  reason        String? // why, in the learner's words (moves) or the Academy's rule (automatic changes)
+  fromSlotIndex Int? // the original seat of a moved session
+  toSlotIndex   Int?
+  fromStartAt   DateTime? // the original and new start instants of a moved session (the original is never lost)
+  toStartAt     DateTime?
+  occurredAt    DateTime      @default(now())
 
   plan LearningPlan @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
 

@@ -7,7 +7,7 @@ import { daysBetween, slotDates, weekNumberOf } from "./capacity";
 import { loadCatalog } from "./catalog";
 import { generatePlan, GENERATOR_VERSION, inputHashOf, type DraftItem, type DraftPhase, type GenerateInput, type PlanDraft, type PlanSummary } from "./generate";
 import { itemDone, rebalance, type RebalanceItem } from "./rebalance";
-import { goalsSchema, type GoalsInput } from "./schema";
+import { availabilitySchema, goalsSchema, type AvailabilityData, type AvailabilityInput, type GoalsInput } from "./schema";
 
 /**
  * The plan service. Every function takes the signed-in user's id first and filters by it; ids from the client are never
@@ -16,20 +16,20 @@ import { goalsSchema, type GoalsInput } from "./schema";
  */
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
-class Stop extends Error {}
+export class Stop extends Error {}
 
 const MAX_ITEMS = 1200;
-const asDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+export const asDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
 type Availability = { startTime: string; sessionMinutes: number; breakMinutes: number; dailyStudyMinutes: number; timezone: string };
 /** The UTC instant of one session of a plan (wall-clock intent kept; later sessions of a day may cross midnight). */
-const instantOf = (p: Availability, date: string, slotIndex: number, timezone: string = p.timezone) => sessionInstant(date, slotIndex, p.startTime, p.sessionMinutes, p.breakMinutes, timezone);
-const perDayOf = (p: Availability) => sessionsPerDay(p.dailyStudyMinutes, p.sessionMinutes, p.breakMinutes);
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-type Tx = Prisma.TransactionClient;
+export const instantOf = (p: Availability, date: string, slotIndex: number, timezone: string = p.timezone) => sessionInstant(date, slotIndex, p.startTime, p.sessionMinutes, p.breakMinutes, timezone);
+export const perDayOf = (p: Availability) => sessionsPerDay(p.dailyStudyMinutes, p.sessionMinutes, p.breakMinutes);
+export const iso = (d: Date) => d.toISOString().slice(0, 10);
+export type Tx = Prisma.TransactionClient;
 
 type PlanRow = NonNullable<Awaited<ReturnType<typeof loadPlan>>>;
-async function loadPlan(client: Tx | typeof db, userId: string, status: "DRAFT" | "ACTIVE" | "PAUSED") {
+export async function loadPlan(client: Tx | typeof db, userId: string, status: "DRAFT" | "ACTIVE" | "PAUSED") {
   return client.learningPlan.findFirst({
     where: { userId, status },
     include: { goals: { include: { department: { select: { code: true, sortOrder: true } } } } },
@@ -102,8 +102,15 @@ async function linkLearnerMissions(tx: Tx, userId: string, planId: string) {
   for (const lm of lms) await tx.learningPlanItem.updateMany({ where: { planId, userId, missionId: lm.missionId }, data: { learnerMissionId: lm.id } });
 }
 
-const event = (tx: Tx, planId: string, userId: string, type: Prisma.LearningPlanEventUncheckedCreateInput["type"], extra: { itemId?: string; fromDate?: string; toDate?: string; note?: string } = {}) =>
-  tx.learningPlanEvent.create({ data: { planId, userId, type, itemId: extra.itemId, fromDate: extra.fromDate ? asDate(extra.fromDate) : undefined, toDate: extra.toDate ? asDate(extra.toDate) : undefined, note: extra.note } });
+/** One row of plan history. `actor` says who did it: LEARNER (they asked for it) or SYSTEM (the Academy did it). Never edited afterwards. */
+export type EventExtra = { itemId?: string; fromDate?: string; toDate?: string; note?: string; actor?: "LEARNER" | "SYSTEM"; reason?: string; fromSlotIndex?: number; toSlotIndex?: number; fromStartAt?: Date; toStartAt?: Date };
+export const event = (tx: Tx, planId: string, userId: string, type: Prisma.LearningPlanEventUncheckedCreateInput["type"], extra: EventExtra = {}) =>
+  tx.learningPlanEvent.create({
+    data: {
+      planId, userId, type, itemId: extra.itemId, fromDate: extra.fromDate ? asDate(extra.fromDate) : undefined, toDate: extra.toDate ? asDate(extra.toDate) : undefined, note: extra.note,
+      actor: extra.actor ?? "SYSTEM", reason: extra.reason, fromSlotIndex: extra.fromSlotIndex, toSlotIndex: extra.toSlotIndex, fromStartAt: extra.fromStartAt, toStartAt: extra.toStartAt,
+    },
+  });
 
 // ───────────────────────── generate ─────────────────────────
 
@@ -135,7 +142,7 @@ export async function generateDraft(userId: string): Promise<Result<{ planId: st
     await tx.learningPlanPhase.deleteMany({ where: { planId: plan.id, userId } }); // items go with their phases
     await storeDraft(tx, plan.id, userId, result.draft, depts);
     await tx.learningPlan.update({ where: { id: plan.id }, data: { inputHash: result.draft.inputHash, catalogVersion: input.catalogVersion, generatorVersion: GENERATOR_VERSION, summary: result.draft.summary as unknown as Prisma.InputJsonValue } });
-    await event(tx, plan.id, userId, "GENERATED", { note: `${result.draft.items.length} sessions` });
+    await event(tx, plan.id, userId, "GENERATED", { note: `${result.draft.items.length} sessions`, actor: "LEARNER" });
   });
   return { ok: true, planId: plan.id, summary: result.draft.summary, unchanged: false };
 }
@@ -169,7 +176,7 @@ export async function activatePlan(userId: string): Promise<Result<{ planId: str
       await tx.scheduleConfig.updateMany({ where: { userId, isActive: true }, data: { isActive: false } }); // one reminder source at a time
       await linkLearnerMissions(tx, userId, plan.id);
       await tx.learningPlan.update({ where: { id: plan.id }, data: { status: "ACTIVE", draftKey: null, activeKey: userId, activatedAt: new Date(), timezone: settings.timezone } });
-      await event(tx, plan.id, userId, "ACTIVATED");
+      await event(tx, plan.id, userId, "ACTIVATED", { actor: "LEARNER" });
       return { ok: true, planId: plan.id };
     });
   } catch (e) {
@@ -191,18 +198,18 @@ export type PlanView = {
   items: PlanItemView[]; today: PlanItemView[]; catalogOutdated: boolean;
 };
 
-async function itemsWithState(userId: string, planId: string) {
-  return db.learningPlanItem.findMany({
+export async function itemsWithState(userId: string, planId: string, client: Tx | typeof db = db) {
+  return client.learningPlanItem.findMany({
     where: { planId, userId },
     orderBy: [{ date: "asc" }, { position: "asc" }],
     include: {
       department: { select: { code: true } },
-      mission: { select: { code: true, steps: { select: { id: true, position: true } } } },
+      mission: { select: { code: true, sortOrder: true, level: { select: { number: true } }, steps: { select: { id: true, position: true } } } },
       learnerMission: { select: { status: true, completedSteps: true, _count: { select: { submissions: true } } } },
     },
   });
 }
-const derivedDone = (i: Awaited<ReturnType<typeof itemsWithState>>[number]) =>
+export const derivedDone = (i: Awaited<ReturnType<typeof itemsWithState>>[number]) =>
   itemDone(i, i.learnerMission ? { status: i.learnerMission.status, completedSteps: i.learnerMission.completedSteps, hasSubmission: i.learnerMission._count.submissions > 0, steps: i.mission?.steps ?? [] } : null);
 
 /** The learner's plan (active, else paused, else draft). "Done" is derived from their mission, never stored. */
@@ -263,7 +270,7 @@ export async function reconcilePlan(userId: string, now: Date = new Date()): Pro
     let position = Math.max(0, ...rows.map((i) => i.position));
     for (const id of r.markMissed) {
       const { count } = await tx.learningPlanItem.updateMany({ where: { id, userId, status: "PLANNED" }, data: { status: "MISSED" } });
-      if (count) await event(tx, plan.id, userId, "MISSED", { itemId: id, fromDate: iso(byId.get(id)!.date) });
+      if (count) await event(tx, plan.id, userId, "MISSED", { itemId: id, fromDate: iso(byId.get(id)!.date), reason: "Not done by the end of its day" });
     }
     for (const id of r.cancel) await tx.learningPlanItem.updateMany({ where: { id, userId, status: "PLANNED", kind: { in: ["PRACTICE", "REVIEW"] } }, data: { status: "CANCELLED" } });
     for (const c of r.catchUps) {
@@ -277,7 +284,7 @@ export async function reconcilePlan(userId: string, now: Date = new Date()): Pro
           missionId: m.missionId, learnerMissionId: m.learnerMissionId, stepFrom: m.stepFrom, stepTo: m.stepTo, continuesPrev: m.continuesPrev, rescheduledFromId: m.id,
         },
       });
-      await event(tx, plan.id, userId, "CATCH_UP_CREATED", { itemId: created.id, fromDate: iso(m.date), toDate: c.date });
+      await event(tx, plan.id, userId, "CATCH_UP_CREATED", { itemId: created.id, fromDate: iso(m.date), toDate: c.date, fromSlotIndex: m.slotIndex, toSlotIndex: c.slotIndex, reason: "Replaces a missed session" });
     }
   });
   return { ok: true, missed: r.markMissed.length, catchUps: r.catchUps.length, shortfall: r.shortfall.length };
@@ -292,7 +299,7 @@ export async function pausePlan(userId: string, now: Date = new Date()): Promise
   if (!plan) return fail("You have no active plan.");
   await db.$transaction(async (tx) => {
     await tx.learningPlan.update({ where: { id: plan.id }, data: { status: "PAUSED", activeKey: null, pausedAt: now } });
-    await event(tx, plan.id, userId, "PAUSED");
+    await event(tx, plan.id, userId, "PAUSED", { actor: "LEARNER" });
   });
   return { ok: true };
 }
@@ -332,7 +339,7 @@ export async function resumePlan(userId: string, now: Date = new Date()): Promis
         }
       }
       await tx.learningPlan.update({ where: { id: plan.id }, data: { status: "ACTIVE", activeKey: userId, pausedAt: null } });
-      await event(tx, plan.id, userId, "RESUMED", { note: `${moved} sessions moved` });
+      await event(tx, plan.id, userId, "RESUMED", { note: `${moved} sessions moved`, actor: "LEARNER" });
       return { ok: true, moved };
     });
   } catch (e) {
@@ -348,7 +355,7 @@ export async function resumePlan(userId: string, now: Date = new Date()): Promis
  * sessions are cancelled, and the new plan is generated for the remaining days plus any extension. XP, skills, passed
  * missions and progress are never altered.
  */
-async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS_CHANGED", opts: { extraDays: number; goals?: GoalsInput }): Promise<Result<{ planId: string; released: number }>> {
+async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS_CHANGED" | "AVAILABILITY_CHANGED", opts: { extraDays: number; goals?: GoalsInput; availability?: AvailabilityData }): Promise<Result<{ planId: string; released: number }>> {
   const mode = await requirePersonalised(userId);
   if (!mode.ok) return mode;
   const limit = await rateLimitHit(bucketKey("plan:change", userId), LIMITS.planChange);
@@ -374,7 +381,8 @@ async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS
       const departments = await departmentIds(tx);
       const goalDepts = new Set(goals.map((g) => g.departmentCode));
 
-      const { input } = await buildInput(tx, userId, old, goals, today, durationDays);
+      const base = { ...old, ...(opts.availability ?? {}) }; // the new version keeps everything else and takes any new availability
+      const { input } = await buildInput(tx, userId, base, goals, today, durationDays);
       const result = generatePlan(input);
       if (!result.ok) throw new Stop(result.error);
       if (result.draft.items.length > MAX_ITEMS) throw new Stop("This plan is too large. Choose a shorter duration.");
@@ -409,7 +417,7 @@ async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS
       const created = await tx.learningPlan.create({
         data: {
           userId, status: "ACTIVE", activeKey: userId, parentPlanId: old.id, durationKind: "CUSTOM", durationDays, startDate: asDate(today), endDate: asDate(addDaysISO(today, durationDays - 1)), timezone: old.timezone,
-          experience: old.experience, sessionMinutes: old.sessionMinutes, dailyStudyMinutes: old.dailyStudyMinutes, breakMinutes: old.breakMinutes, flexibility: old.flexibility, autoReschedule: old.autoReschedule, weekdays: old.weekdays, startTime: old.startTime, generatorVersion: GENERATOR_VERSION, catalogVersion: input.catalogVersion,
+          experience: base.experience, sessionMinutes: base.sessionMinutes, dailyStudyMinutes: base.dailyStudyMinutes, breakMinutes: base.breakMinutes, flexibility: base.flexibility, autoReschedule: base.autoReschedule, weekdays: base.weekdays, startTime: base.startTime, generatorVersion: GENERATOR_VERSION, catalogVersion: input.catalogVersion,
           inputHash: result.draft.inputHash, summary: result.draft.summary as unknown as Prisma.InputJsonValue, activatedAt: now,
         },
       });
@@ -418,8 +426,8 @@ async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS
       });
       await storeDraft(tx, created.id, userId, result.draft, departments);
       await linkLearnerMissions(tx, userId, created.id);
-      await event(tx, created.id, userId, "GENERATED", { note: `${result.draft.items.length} sessions` });
-      await event(tx, created.id, userId, kind, { fromDate: iso(old.endDate), toDate: iso(created.endDate) });
+      await event(tx, created.id, userId, "GENERATED", { note: `${result.draft.items.length} sessions`, actor: "LEARNER" });
+      await event(tx, created.id, userId, kind, { fromDate: iso(old.endDate), toDate: iso(created.endDate), actor: "LEARNER" });
       return { ok: true, planId: created.id, released };
     });
   } catch (e) {
@@ -432,6 +440,35 @@ export const extendPlan = (userId: string, extraDays: number, now: Date = new Da
   Number.isInteger(extraDays) && extraDays >= 7 && extraDays <= 365 ? successor(userId, now, "EXTENDED", { extraDays }) : Promise.resolve(fail("Extend by 7 to 365 days."));
 
 export const changeSubjects = (userId: string, goals: GoalsInput, now: Date = new Date()) => successor(userId, now, "SUBJECTS_CHANGED", { extraDays: 0, goals });
+
+/**
+ * Changes the learner's study days, hours, session length, break, flexibility or rescheduling choice. A change to flexibility or
+ * to the rescheduling permission only is recorded in place; anything that changes WHEN they study builds a new version of the
+ * plan from today (the old one stays as history, future sessions are cancelled, progress is untouched).
+ */
+export async function changeAvailability(userId: string, input: AvailabilityInput, now: Date = new Date()): Promise<Result<{ planId: string; newVersion: boolean }>> {
+  const parsed = availabilitySchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check your study times and try again.");
+  const a = parsed.data;
+  const mode = await requirePersonalised(userId);
+  if (!mode.ok) return mode;
+  const current = await loadPlan(db, userId, "ACTIVE");
+  if (!current) return fail("You have no active plan. Resume it first.");
+
+  const sameSchedule =
+    a.startTime === current.startTime && a.sessionMinutes === current.sessionMinutes && a.dailyStudyMinutes === current.dailyStudyMinutes && a.breakMinutes === current.breakMinutes &&
+    [...a.weekdays].sort((x, y) => x - y).join() === [...current.weekdays].sort((x, y) => x - y).join();
+  if (sameSchedule) {
+    if (a.flexibility === current.flexibility && a.autoReschedule === current.autoReschedule) return { ok: true, planId: current.id, newVersion: false };
+    await db.$transaction(async (tx) => {
+      await tx.learningPlan.update({ where: { id: current.id }, data: { flexibility: a.flexibility, autoReschedule: a.autoReschedule } });
+      await event(tx, current.id, userId, "PREFERENCES_CHANGED", { actor: "LEARNER", note: `Flexibility ${a.flexibility.toLowerCase()}, automatic rescheduling ${a.autoReschedule ? "on" : "off"}` });
+    });
+    return { ok: true, planId: current.id, newVersion: false };
+  }
+  const r = await successor(userId, now, "AVAILABILITY_CHANGED", { extraDays: 0, availability: { ...a, weekdays: [...a.weekdays].sort((x, y) => x - y) } });
+  return r.ok ? { ok: true, planId: r.planId, newVersion: true } : r;
+}
 
 // ───────────────────────── reminders: time zone or time changed ─────────────────────────
 

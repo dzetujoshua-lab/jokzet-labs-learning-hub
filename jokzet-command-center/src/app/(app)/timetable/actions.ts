@@ -40,3 +40,27 @@ export async function buildPlanAction(): Promise<Done> {
   refresh();
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
+
+// ── Moving a session and changing availability ──
+import { z } from "zod";
+import { moveSession } from "@/lib/plan/reschedule-service";
+import { changeAvailability } from "@/lib/plan/service";
+import type { AvailabilityInput } from "@/lib/plan/schema";
+
+const id = z.string().min(1).max(64);
+
+export async function moveSessionAction(itemId: string, date: string, slotIndex: number, reason: string): Promise<Done> {
+  const user = await guard();
+  if (!user) return off;
+  const r = await moveSession(user.id, id.parse(itemId), { date, slotIndex, reason });
+  refresh();
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+export async function changeAvailabilityAction(input: AvailabilityInput): Promise<Done & { newVersion?: boolean }> {
+  const user = await guard();
+  if (!user) return off;
+  const r = await changeAvailability(user.id, input);
+  refresh();
+  return r.ok ? { ok: true, newVersion: r.newVersion } : { ok: false, error: r.error };
+}

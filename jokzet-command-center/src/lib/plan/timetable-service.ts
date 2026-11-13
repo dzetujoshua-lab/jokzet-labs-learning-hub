@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
+import { fmtDate } from "@/lib/programme";
 import { localDateOf } from "@/lib/schedule/time";
 import { sessionsPerDay } from "./availability";
 import { personalisedLearningEnabled } from "./flag";
+import { getMoveOptions, type MoveOptionView } from "./reschedule-service";
 import { getPlanView, type PlanItemView } from "./service";
 import { describeEvent, finishEstimate, monthGrid, parseDate, parseView, progressOf, weekDates, type TimetableView } from "./timetable";
 
@@ -23,7 +25,9 @@ export type Timetable = {
   catchUpOf: Record<string, string>; // catch-up session id -> the date of the session it replaces
   milestones: { title: string; objective: string; startDate: string; endDate: string }[];
   weekObjective: string | null;
-  history: { at: string; title: string; detail: string }[];
+  history: { at: string; title: string; detail: string; by: "You" | "The Academy"; reason: string | null }[];
+  /** For the day view: the slots each upcoming session could move to (sessions that cannot move have no entry). */
+  moveOptions: Record<string, MoveOptionView[]>;
 };
 
 /** Can this learner see the timetable at all? Only on the personalised programme, and only while the rollout flag is on. */
@@ -66,6 +70,20 @@ export async function getTimetable(userId: string, opts: { view?: string; date?:
     catchUpOf: Object.fromEntries(live.filter((i) => i.kind === "CATCH_UP" && i.rescheduledFromId).flatMap((i) => { const o = live.find((x) => x.id === i.rescheduledFromId); return o ? [[i.id, o.date] as const] : []; })),
     milestones: plan.phases.filter((p) => p.startDate.slice(0, 7) <= monthKey && p.endDate.slice(0, 7) >= monthKey).map((p) => ({ title: p.title, objective: p.objective, startDate: p.startDate, endDate: p.endDate })),
     weekObjective: inWeek.find((i) => i.kind === "TEACHING" && i.status === "PLANNED")?.title ?? inWeek.find((i) => i.kind === "TEACHING")?.title ?? null,
-    history: events.map((e) => ({ at: e.occurredAt.toISOString(), ...describeEvent({ type: e.type, fromDate: iso(e.fromDate), toDate: iso(e.toDate), note: e.note }) })),
+    history: events.map((e) => ({ at: e.occurredAt.toISOString(), ...describeEvent({ type: e.type, fromDate: iso(e.fromDate), toDate: iso(e.toDate), note: e.note }, fmtDate), by: e.actor === "LEARNER" ? ("You" as const) : ("The Academy" as const), reason: e.reason })),
+    moveOptions: view === "day" && plan.status === "ACTIVE" ? await getMoveOptions(userId, inRange.filter((i) => i.status === "PLANNED" && !i.done).map((i) => i.id), now) : {},
   };
+}
+
+export type MissionSchedule = { planStatus: "ACTIVE" | "PAUSED"; sessions: { id: string; date: string; time: string; title: string; minutes: number; kind: string; status: string; done: boolean }[] };
+
+/** The sessions of one mission in the learner's plan, for the mission page (read-only; null when the plan does not teach it). */
+export async function getMissionSchedule(userId: string, missionCode: string, now: Date = new Date()): Promise<MissionSchedule | null> {
+  const plan = await getPlanView(userId, now);
+  if (!plan || (plan.status !== "ACTIVE" && plan.status !== "PAUSED")) return null;
+  const sessions = plan.items
+    .filter((i) => i.missionCode === missionCode && i.status !== "CANCELLED" && i.kind !== "PRACTICE" && i.kind !== "REVIEW")
+    .sort((a, b) => (a.date === b.date ? a.slotIndex - b.slotIndex : a.date < b.date ? -1 : 1))
+    .map((i) => ({ id: i.id, date: i.date, time: i.time, title: i.title, minutes: i.minutes, kind: i.kind, status: i.status, done: i.done }));
+  return sessions.length ? { planStatus: plan.status, sessions } : null;
 }

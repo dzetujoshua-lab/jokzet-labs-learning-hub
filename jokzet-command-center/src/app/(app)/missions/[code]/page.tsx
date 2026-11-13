@@ -7,10 +7,12 @@ import { AssessmentResult } from "@/components/assessments/assessment-result";
 import { DeptGlyph } from "@/components/dashboard/dept-glyph";
 import { MissionWorkspace } from "@/components/missions/mission-workspace";
 import { WatchPanel } from "@/components/missions/watch-panel";
+import { MissionSchedulePanel } from "@/components/timetable/mission-schedule";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/dal";
 import { getMissionDetail } from "@/lib/missions/progress";
 import { listDepartments } from "@/lib/missions/service";
+import { getMissionSchedule, timetableAccess } from "@/lib/plan/timetable-service";
 import { parseResourceUrl } from "@/lib/resources/embed";
 import { getMissionWatch } from "@/lib/resources/service";
 import { getSubmissionState } from "@/lib/missions/submissions";
@@ -33,6 +35,7 @@ export default async function MissionDetailPage({ params }: PageProps<"/missions
   const watch = await getMissionWatch(user.id, mission.id); // approved WATCH resources only
   const state = learnerMission ? await getSubmissionState(user.id, learnerMission.id) : null;
   const departments = (await listDepartments(user.id)).map((d) => ({ code: d.code, name: d.name }));
+  const schedule = mission.code && (await timetableAccess(user.id)) ? await getMissionSchedule(user.id, mission.code) : null; // only for personalised learners with a plan
   const latest = state?.latest ?? null;
   const draftEvidence = latest?.status === "DRAFT" ? latest.evidence : [];
   const meta = metaFor(mission.department.code);
@@ -130,6 +133,7 @@ export default async function MissionDetailPage({ params }: PageProps<"/missions
         </div>
 
         <aside className="space-y-5">
+          {schedule ? <MissionSchedulePanel schedule={schedule} /> : null}
           {watch.length ? (
             <WatchPanel resources={watch} />
           ) : (
