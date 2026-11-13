@@ -69,6 +69,24 @@ export const onboardingSchema = z
     if (secrets.length) ctx.addIssue({ code: "custom", path: ["goals"], message: secretMessage(secrets) });
   });
 
+/** The availability a learner can change later (the same rules as in onboarding). */
+export const availabilitySchema = z
+  .object({
+    weekdays: z.array(z.number().int().min(0).max(6)).min(1, "Choose at least one day.").max(7),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use the form HH:MM."),
+    sessionMinutes: z.number().int().min(15).max(240),
+    dailyStudyMinutes: z.number().int().min(0).max(720).default(0),
+    breakMinutes: z.number().int().min(0).max(60).default(0),
+    flexibility: z.enum(["STRICT", "BALANCED", "FLEXIBLE"]),
+    autoReschedule: z.boolean(),
+  })
+  .superRefine((v, ctx) => {
+    if (new Set(v.weekdays).size !== v.weekdays.length) ctx.addIssue({ code: "custom", path: ["weekdays"], message: "Each day can be chosen once." });
+    if (v.dailyStudyMinutes !== 0 && v.dailyStudyMinutes < v.sessionMinutes) ctx.addIssue({ code: "custom", path: ["dailyStudyMinutes"], message: "Daily study time must be at least one session (or 0 for one session a day)." });
+  });
+export type AvailabilityInput = z.input<typeof availabilitySchema>;
+export type AvailabilityData = z.output<typeof availabilitySchema>;
+
 export type OnboardingInput = z.input<typeof onboardingSchema>;
 export type OnboardingData = z.output<typeof onboardingSchema>;
 

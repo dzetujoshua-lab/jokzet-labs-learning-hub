@@ -104,6 +104,7 @@ export const LIMITS = {
   reviewActionReviewer: { limit: 240, windowSeconds: 60 * 60 }, // claiming and completing reviews
   resourceEngagementUser: { limit: 60, windowSeconds: 60 }, // advisory resource interactions
   planGenerate: { limit: 20, windowSeconds: 60 * 60 }, // generating or regenerating a plan
+  planMove: { limit: 60, windowSeconds: 60 * 60 }, // moving single sessions
   planChange: { limit: 30, windowSeconds: 60 * 60 }, // extend, change subjects, pause, resume
   onboardingSave: { limit: 60, windowSeconds: 60 * 60 }, // saving onboarding answers
   activityCreateUser: { limit: 30, windowSeconds: 60 * 60 }, // creating personal activities and accepting challenges

@@ -94,8 +94,8 @@ export function finishEstimate(
 }
 
 /** A sentence for one history row (what happened, in plain words). */
-export function describeEvent(e: { type: string; fromDate: string | null; toDate: string | null; note: string | null }): { title: string; detail: string } {
-  const d = (x: string | null) => x ?? "";
+export function describeEvent(e: { type: string; fromDate: string | null; toDate: string | null; note: string | null }, fmt: (iso: string) => string = (x) => x): { title: string; detail: string } {
+  const d = (x: string | null) => (x ? fmt(x) : "");
   switch (e.type) {
     case "GENERATED": return { title: "Plan created", detail: e.note ?? "" };
     case "ACTIVATED": return { title: "Plan started", detail: "" };
@@ -106,6 +106,9 @@ export function describeEvent(e: { type: string; fromDate: string | null; toDate
     case "EXTENDED": return { title: "Plan extended", detail: `${d(e.fromDate)} → ${d(e.toDate)}` };
     case "SUBJECTS_CHANGED": return { title: "Subjects changed", detail: "" };
     case "ITEMS_RELEASED": return { title: "Unstarted work released", detail: e.note ?? "" };
+    case "RESCHEDULED": return { title: "Session moved", detail: `${d(e.fromDate)} → ${d(e.toDate)}` };
+    case "AVAILABILITY_CHANGED": return { title: "Study times changed", detail: e.note ?? "A new timetable was built from that day" };
+    case "PREFERENCES_CHANGED": return { title: "Preferences changed", detail: e.note ?? "" };
     case "COMPLETED": return { title: "Plan completed", detail: "" };
     default: return { title: e.type, detail: "" };
   }

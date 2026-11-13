@@ -13,6 +13,7 @@ export function HistoryList({ history }: { history: Timetable["history"] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] text-foreground">{h.title}</p>
                 {h.detail ? <p className="text-xs text-muted-foreground">{h.detail}</p> : null}
+                <p className="text-xs text-muted-foreground">{h.by === "You" ? "By you" : "Automatic"}{h.reason ? ` · ${h.reason}` : ""}</p>
               </div>
               <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{fmtDate(h.at.slice(0, 10))}</span>
             </li>

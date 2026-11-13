@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -63,6 +64,7 @@ export default async function TimetablePage({ searchParams }: PageProps<"/timeta
           <p className="mt-1 text-xs text-muted-foreground">{t.progress.completed} of {t.progress.total} sessions done{t.progress.missed ? ` · ${t.progress.missed} missed` : ""}</p>
           <div className="mt-4">
             {t.plan.status === "ACTIVE" ? <PlanControls mode="ACTIVE" autoReschedule={t.plan.autoReschedule} /> : <p className="text-xs text-muted-foreground">Paused. Use Resume plan above when you are ready.</p>}
+            {t.plan.status === "ACTIVE" ? <Link href="/timetable/settings" className="mt-3 inline-block font-mono text-[10px] uppercase tracking-[0.14em] text-primary">Timetable settings</Link> : null}
           </div>
         </section>
       </div>
