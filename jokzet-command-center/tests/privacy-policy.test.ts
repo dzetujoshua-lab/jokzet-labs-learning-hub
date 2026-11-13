@@ -95,6 +95,13 @@ describe("the page never invents facts", () => {
     expect(t).not.toContain("mailto:");
   });
 
+  it("states the 18+ rule as the sign-up form implements it, without claiming verification", () => {
+    expect(text).toContain("for people aged 18 or over");
+    expect(text).toContain("we do not check your age");
+    expect(text).toContain("Accounts created before that question was added were not asked");
+    expect(text).not.toMatch(/verif(y|ied) (your )?age/i);
+  });
+
   it("makes no claims the app does not support", () => {
     for (const claim of [/GDPR/, /CCPA/, /COPPA/, /encrypted at rest/i, /we (are|will be) (SOC|ISO)/i, /guarantee/i, /gmail\.(readonly|send|modify|compose)/i, /ads?-?free/i]) {
       expect(text, String(claim)).not.toMatch(claim);

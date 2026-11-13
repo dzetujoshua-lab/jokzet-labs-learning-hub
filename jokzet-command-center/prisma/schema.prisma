@@ -328,6 +328,9 @@ model Profile {
   programmeStart   DateTime         @default("2026-11-16T00:00:00.000Z") @db.Date
   learnerMode      LearnerMode      @default(PERSONALISED) // existing accounts are backfilled to LEGACY by the migration
   onboardingStatus OnboardingStatus @default(NOT_STARTED)
+  /// When the person confirmed at sign-up that they are 18 or older. NULL = never asked (accounts created before this existed,
+  /// or created outside the sign-up form). It is a self-declaration, not a verified age, and is never read as proof of adulthood.
+  adultConfirmedAt DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

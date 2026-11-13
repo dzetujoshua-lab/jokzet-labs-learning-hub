@@ -104,12 +104,13 @@ export default function PrivacyPolicyPage() {
             <Ext href={LEGAL.siteUrl}>{LEGAL.siteUrl.replace("https://", "")}</Ext>. It is run by {LEGAL.siteName}
             {LEGAL.operatorLegalName ? <> ({LEGAL.operatorLegalName})</> : null} from {LEGAL.country}, {LEGAL.businessStatus}. This policy explains what information the platform handles, why, who can see it, how long it is kept, and how you can ask for it to be changed or deleted.
           </p>
+          <p>The platform is for people aged 18 or over, and sign-up asks you to confirm this. Accounts created before that question was added were not asked. We do not knowingly provide the platform to anyone under 18; if you believe a child has signed up, contact us and we will delete the account.</p>
           <p>It describes what the platform actually does today. If that changes, this page will be updated.</p>
         </Section>
 
         <Section id="information-we-collect" n={2} title="Information we collect">
           <H>Account</H>
-          <List items={["Your email address and the display name you choose.", "Your password, which is stored only as a one-way Argon2 hash. We cannot read it back."]} />
+          <List items={["Your email address and the display name you choose.", "Your password, which is stored only as a one-way Argon2 hash. We cannot read it back.", "Whether you confirmed at sign-up that you are 18 or older, and when. This is your own confirmation; we do not check your age or ask for your date of birth."]} />
           <H>Signing in</H>
           <List
             items={[

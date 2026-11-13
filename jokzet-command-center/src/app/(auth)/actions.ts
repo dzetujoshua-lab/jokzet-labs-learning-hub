@@ -4,12 +4,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authenticate, registerUser } from "@/lib/auth/service";
 import { endSession, startSession } from "@/lib/auth/dal";
-import { loginSchema, registerSchema } from "@/lib/auth/validation";
+import { loginSchema, registerFormSchema } from "@/lib/auth/validation";
 import { LIMITS, bucketKey, clientIp, rateLimitHit } from "@/lib/ratelimit";
 
 export type FormState = {
   error?: string;
-  fieldErrors?: Partial<Record<"displayName" | "email" | "password", string>>;
+  fieldErrors?: Partial<Record<"displayName" | "email" | "password" | "adult", string>>;
   email?: string;
   displayName?: string;
 } | undefined;
@@ -37,10 +37,11 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   if (!registerLimit.ok) {
     return { error: "Too many sign-up attempts from this network. Please try again later." };
   }
-  const parsed = registerSchema.safeParse({
+  const parsed = registerFormSchema.safeParse({
     displayName: formData.get("displayName"),
     email: formData.get("email"),
     password: formData.get("password"),
+    adult: formData.get("adult") ?? undefined,
   });
   if (!parsed.success) {
     return {
@@ -50,7 +51,7 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
     };
   }
 
-  const result = await registerUser(parsed.data);
+  const result = await registerUser({ displayName: parsed.data.displayName, email: parsed.data.email, password: parsed.data.password }, { adultConfirmed: true });
   if (!result.ok) {
     // Deliberately generic: do not confirm which emails are registered.
     return { error: "We could not create that account. Try a different email or sign in.", email: parsed.data.email, displayName: parsed.data.displayName };
