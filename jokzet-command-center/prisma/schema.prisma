@@ -68,6 +68,25 @@ enum RecommendationStatus {
   DISMISSED
 }
 
+/// What a learning resource is. Official documentation, playlists and interactive tutorials are first-class, not just videos.
+enum ResourceKind {
+  VIDEO
+  PLAYLIST
+  DOCUMENTATION
+  INTERACTIVE
+  ORIGINAL
+  DEMONSTRATION
+}
+
+/// Review state of a resource. Only APPROVED resources are ever shown to learners.
+enum ApprovalStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 enum MissionPhase {
   WATCH
   DO
@@ -239,6 +258,7 @@ model User {
   bosSales                BosSale[]
   bosExpenses             BosExpense[]
   activityRecommendations ActivityRecommendation[]
+  resourceEngagements     ResourceEngagement[]
 }
 
 model Session {
@@ -357,18 +377,19 @@ model Mission {
   category               ActivityCategory @default(CURRICULUM_MISSION) // CHECK: CURRICULUM_MISSION exactly when createdById is null
   origin                 ActivityOrigin   @default(LEARNING_PLAN)
 
-  department      Department               @relation(fields: [departmentId], references: [id])
-  level           Level?                   @relation(fields: [levelId], references: [id])
-  createdBy       User?                    @relation("CustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
-  steps           MissionStep[]
-  resources       Resource[]
-  rubric          AssessmentRubric?
-  skills          MissionSkill[]
-  learnerMissions LearnerMission[]
-  reminders       Reminder[]
-  portfolio       PortfolioProject[]
-  evidence        EvidenceItem[]
-  recommendations ActivityRecommendation[]
+  department       Department               @relation(fields: [departmentId], references: [id])
+  level            Level?                   @relation(fields: [levelId], references: [id])
+  createdBy        User?                    @relation("CustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
+  steps            MissionStep[]
+  resources        Resource[]
+  rubric           AssessmentRubric?
+  skills           MissionSkill[]
+  learnerMissions  LearnerMission[]
+  reminders        Reminder[]
+  portfolio        PortfolioProject[]
+  evidence         EvidenceItem[]
+  recommendations  ActivityRecommendation[]
+  missionResources MissionResource[]
 
   @@index([departmentId, levelId, sortOrder])
   @@index([createdById])
@@ -1067,4 +1088,80 @@ model ActivityRecommendation {
 
   @@unique([userId, missionId, status])
   @@index([userId, status])
+}
+
+// ─────────────── Instructional resources (WATCH) ───────────────
+/// One approved piece of instructional material. Content-as-code: rows come from prisma/curriculum/resources.ts and are
+/// reviewed by pull request. The seed never invents a URL and never deletes a resource (retired ones are ARCHIVED).
+model LearningResource {
+  id              String         @id @default(cuid())
+  canonicalUrl    String         @unique
+  provider        String // e.g. youtube, mdn, github-docs
+  kind            ResourceKind
+  title           String
+  durationMinutes Int?
+  language        String         @default("en")
+  level           String? // free-text target level, e.g. "beginner"
+  embeddable      Boolean        @default(false) // may be shown in our player; otherwise only an external link
+  status          ApprovalStatus @default(DRAFT)
+  approvedBy      String?
+  approvedAt      DateTime?
+  lastVerifiedAt  DateTime?
+  licenceNote     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  missions    MissionResource[]
+  reviews     ResourceReview[]
+  engagements ResourceEngagement[]
+
+  @@index([status])
+}
+
+/// Which resources teach which mission. A mission has at most one PRIMARY resource (partial unique index in the migration).
+model MissionResource {
+  missionId  String
+  resourceId String
+  role       String // PRIMARY | SUPPLEMENTARY
+  position   Int    @default(0)
+
+  mission  Mission          @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  resource LearningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@id([missionId, resourceId])
+  @@index([resourceId])
+}
+
+/// Review history for a resource: survives replacements, so approvals stay traceable.
+model ResourceReview {
+  id           String   @id @default(cuid())
+  resourceId   String
+  reviewerName String
+  decision     String // APPROVED | CHANGES_REQUESTED | REJECTED
+  note         String?
+  at           DateTime
+
+  resource LearningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, reviewerName, at])
+}
+
+/// A learner's latest interaction with a resource. ADVISORY ONLY: it is reported by the browser, so it can be forged and
+/// must never gate submission, assessment, credit or plan progress. Opening a link is never "watched".
+model ResourceEngagement {
+  userId           String
+  resourceId       String
+  lastEvent        String
+  progressPct      Int?
+  bookmarked       Boolean   @default(false)
+  startedAt        DateTime?
+  completedAt      DateTime? // client-reported, at or above the completion threshold
+  externalOpenedAt DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource LearningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, resourceId])
+  @@index([resourceId])
 }

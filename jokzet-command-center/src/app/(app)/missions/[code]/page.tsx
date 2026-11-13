@@ -6,10 +6,13 @@ import { startMissionAction } from "@/app/(app)/actions";
 import { AssessmentResult } from "@/components/assessments/assessment-result";
 import { DeptGlyph } from "@/components/dashboard/dept-glyph";
 import { MissionWorkspace } from "@/components/missions/mission-workspace";
+import { WatchPanel } from "@/components/missions/watch-panel";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/dal";
 import { getMissionDetail } from "@/lib/missions/progress";
 import { listDepartments } from "@/lib/missions/service";
+import { parseResourceUrl } from "@/lib/resources/embed";
+import { getMissionWatch } from "@/lib/resources/service";
 import { getSubmissionState } from "@/lib/missions/submissions";
 import { metaFor, toLabel, todayISO } from "@/lib/programme";
 
@@ -27,6 +30,7 @@ export default async function MissionDetailPage({ params }: PageProps<"/missions
   if (!detail) notFound();
 
   const { mission, learnerMission } = detail;
+  const watch = await getMissionWatch(user.id, mission.id); // approved WATCH resources only
   const state = learnerMission ? await getSubmissionState(user.id, learnerMission.id) : null;
   const departments = (await listDepartments(user.id)).map((d) => ({ code: d.code, name: d.name }));
   const latest = state?.latest ?? null;
@@ -126,21 +130,26 @@ export default async function MissionDetailPage({ params }: PageProps<"/missions
         </div>
 
         <aside className="space-y-5">
-          <section className="panel p-5">
-            <p className="mono-label">Demonstration</p>
-            {mission.resources.map((r) => (
-              <div key={r.id} className="mt-3">
-                <p className="text-[13px] text-foreground">{r.title}</p>
-                {r.url ? (
-                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
-                    open
-                  </a>
-                ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">{r.notes ?? "To be supplied."}</p>
-                )}
-              </div>
-            ))}
-          </section>
+          {watch.length ? (
+            <WatchPanel resources={watch} />
+          ) : (
+            <section className="panel p-5">
+              <p className="mono-label">Watch · learn it first</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">No approved video or guide has been added for this mission yet. The steps below still tell you what to do.</p>
+              {mission.resources.map((r) => (
+                <div key={r.id} className="mt-3">
+                  <p className="text-[13px] text-foreground">{r.title}</p>
+                  {r.url && parseResourceUrl(r.url).ok ? (
+                    <a href={r.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block font-mono text-[10px] uppercase tracking-[0.14em] text-primary">
+                      open
+                    </a>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">{r.notes ?? "To be supplied."}</p>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
 
           <section className="panel p-5">
             <p className="mono-label">Experiment challenge</p>
