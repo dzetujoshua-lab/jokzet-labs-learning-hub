@@ -350,6 +350,7 @@ model Department {
   reviewerScopes ReviewerScope[]
   goals          LearningGoal[]
   baselines      BaselineAssessment[]
+  planItems      LearningPlanItem[]
   missions       Mission[]
   progress       LearnerDepartment[]
   portfolio      PortfolioProject[]
@@ -440,6 +441,7 @@ model Mission {
   recommendations  ActivityRecommendation[]
   missionResources MissionResource[]
   baselines        BaselineAssessment[]
+  planItems        LearningPlanItem[]
 
   @@index([departmentId, levelId, sortOrder])
   @@index([createdById])
@@ -462,6 +464,7 @@ model MissionStep {
   position     Int
   title        String
   instructions String
+  minutes      Int? // authored time for this step; when missing the plan generator estimates it (and says so)
 
   mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
 
@@ -541,6 +544,7 @@ model LearnerMission {
   mission     Mission              @relation(fields: [missionId], references: [id])
   submissions Submission[]
   baselines   BaselineAssessment[]
+  planItems   LearningPlanItem[]
 
   @@unique([userId, missionId])
   @@unique([id, userId])
@@ -720,6 +724,7 @@ model Notification {
   userId       String
   reminderId   String?
   instanceId   String?
+  planItemId   String?
   kind         NotificationKind @default(DUE)
   type         String
   dedupeKey    String?          @unique // e.g. due:<instanceId>, adv:<instanceId>:15 (one notification per event)
@@ -733,10 +738,12 @@ model Notification {
   user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   reminder   Reminder?              @relation(fields: [reminderId], references: [id], onDelete: SetNull)
   instance   DailyMissionInstance?  @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  planItem   LearningPlanItem?      @relation(fields: [planItemId], references: [id], onDelete: Cascade)
   deliveries NotificationDelivery[]
 
   @@index([userId, readAt])
   @@index([userId, createdAt])
+  @@index([planItemId])
 }
 
 // ─────────────── Portfolio and capstone ───────────────
@@ -1416,10 +1423,14 @@ model LearningPlan {
   updatedAt        DateTime        @updatedAt
   activatedAt      DateTime?
   supersededAt     DateTime?
+  pausedAt         DateTime?
 
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   goals     LearningGoal[]
   baselines BaselineAssessment[]
+  phases    LearningPlanPhase[]
+  items     LearningPlanItem[]
+  events    LearningPlanEvent[]
 
   @@unique([id, userId])
   @@index([userId, status])
@@ -1465,4 +1476,115 @@ model BaselineAssessment {
   @@unique([planId, departmentId])
   @@index([userId])
   @@index([learnerMissionId])
+}
+
+// ─────────────── Personalised learning: the plan ───────────────
+enum PlanPhaseKind {
+  FOUNDATION
+  BUILD
+  PROJECT
+  REVIEW
+}
+
+enum PlanItemKind {
+  TEACHING
+  BASELINE
+  CHECKPOINT
+  PRACTICE // repeats an experiment: unassessed, never counts as completion, XP, skill or hours
+  REVIEW // points at open corrections or unfinished work: carries no credit
+  CATCH_UP // a re-scheduled missed teaching item
+}
+
+enum PlanItemStatus {
+  PLANNED
+  MISSED
+  CANCELLED
+}
+
+enum PlanEventType {
+  GENERATED
+  ACTIVATED
+  MISSED
+  CATCH_UP_CREATED
+  EXTENDED
+  PAUSED
+  RESUMED
+  SUBJECTS_CHANGED
+  ITEMS_RELEASED
+  COMPLETED
+}
+
+model LearningPlanPhase {
+  id        String        @id @default(cuid())
+  planId    String
+  userId    String
+  position  Int
+  kind      PlanPhaseKind
+  title     String
+  objective String
+  startDate DateTime      @db.Date
+  endDate   DateTime      @db.Date
+
+  plan  LearningPlan       @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
+  items LearningPlanItem[]
+
+  @@unique([planId, position])
+  @@unique([id, userId])
+}
+
+/// One study session. "Passed" is never stored here: it is derived from the learner's mission. Items dated before the
+/// learner's local today never change except PLANNED to MISSED.
+model LearningPlanItem {
+  id                String         @id @default(cuid())
+  planId            String
+  phaseId           String
+  userId            String
+  date              DateTime       @db.Date
+  startAt           DateTime // UTC instant of date + start time in the plan's time zone (drives reminders)
+  position          Int
+  kind              PlanItemKind
+  status            PlanItemStatus @default(PLANNED)
+  minutes           Int
+  title             String
+  objective         String
+  weekNumber        Int
+  departmentId      String?
+  missionId         String?
+  learnerMissionId  String?
+  stepFrom          Int? // MissionStep.position range this session covers
+  stepTo            Int?
+  continuesPrev     Boolean        @default(false)
+  rescheduledFromId String?
+  practisedAt       DateTime?
+  createdAt         DateTime       @default(now())
+
+  plan           LearningPlan      @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
+  phase          LearningPlanPhase @relation(fields: [phaseId, userId], references: [id, userId], onDelete: Cascade)
+  department     Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  mission        Mission?          @relation(fields: [missionId], references: [id], onDelete: NoAction)
+  learnerMission LearnerMission?   @relation(fields: [learnerMissionId], references: [id], onDelete: SetNull)
+  notifications  Notification[]
+
+  @@unique([id, userId])
+  @@index([userId, date])
+  @@index([planId, date])
+  @@index([startAt])
+  @@index([learnerMissionId])
+}
+
+/// Append-only history of what happened to a plan.
+model LearningPlanEvent {
+  id         String        @id @default(cuid())
+  planId     String
+  userId     String
+  itemId     String?
+  type       PlanEventType
+  fromDate   DateTime?     @db.Date
+  toDate     DateTime?     @db.Date
+  note       String?
+  occurredAt DateTime      @default(now())
+
+  plan LearningPlan @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
+
+  @@index([planId, occurredAt])
 }

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { planNotifications } from "./engine";
 import { dispatchPush, type DispatchStats, type PushSender } from "./push";
 import { generateInstances, reconcileMissed } from "@/lib/schedule/daily";
+import { reconcilePlan } from "@/lib/plan/service";
 
 export type SchedulerStats = { users: number; created: number; push: DispatchStats };
 
@@ -17,13 +18,14 @@ export async function runSchedulerOnce(now: Date = new Date(), sender?: PushSend
   running = true;
   try {
     const users = await db.reminderSettings.findMany({
-      where: { enabled: true, user: { isActive: true, scheduleConfigs: { some: { isActive: true } } } },
+      where: { enabled: true, user: { isActive: true, OR: [{ scheduleConfigs: { some: { isActive: true } } }, { learningPlans: { some: { status: "ACTIVE" } } }] } },
       select: { userId: true },
     });
     let created = 0;
     for (const { userId } of users) {
       await generateInstances(userId, now);
       await reconcileMissed(userId, now);
+      await reconcilePlan(userId, now); // plan learners: mark missed sessions and add catch-ups (no-op without an active plan)
       created += await planNotifications(userId, now);
     }
     const push = await dispatchPush(now, sender);

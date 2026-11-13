@@ -103,6 +103,8 @@ export const LIMITS = {
   reviewRequestUser: { limit: 20, windowSeconds: 24 * 60 * 60 }, // asking for reviews
   reviewActionReviewer: { limit: 240, windowSeconds: 60 * 60 }, // claiming and completing reviews
   resourceEngagementUser: { limit: 60, windowSeconds: 60 }, // advisory resource interactions
+  planGenerate: { limit: 20, windowSeconds: 60 * 60 }, // generating or regenerating a plan
+  planChange: { limit: 30, windowSeconds: 60 * 60 }, // extend, change subjects, pause, resume
   onboardingSave: { limit: 60, windowSeconds: 60 * 60 }, // saving onboarding answers
   activityCreateUser: { limit: 30, windowSeconds: 60 * 60 }, // creating personal activities and accepting challenges
 } as const satisfies Record<string, Limit>;
