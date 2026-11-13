@@ -1,7 +1,7 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
-import { addDaysISO, localDateOf } from "@/lib/schedule/time";
+import { addDaysISO, localDateOf, localTimeOf } from "@/lib/schedule/time";
 import { seatsFor, sessionInstant, sessionsPerDay } from "./availability";
 import { daysBetween, slotDates, weekNumberOf } from "./capacity";
 import { loadCatalog } from "./catalog";
@@ -181,12 +181,13 @@ export async function activatePlan(userId: string): Promise<Result<{ planId: str
 // ───────────────────────── view ─────────────────────────
 
 export type PlanItemView = {
-  id: string; date: string; kind: string; status: string; minutes: number; title: string; objective: string; weekNumber: number; departmentCode: string | null;
+  id: string; date: string; slotIndex: number; time: string; kind: string; status: string; minutes: number; title: string; objective: string; weekNumber: number; departmentCode: string | null;
   missionCode: string | null; stepFrom: number | null; stepTo: number | null; continuesPrev: boolean; practised: boolean; done: boolean; rescheduledFromId: string | null;
 };
 export type PlanView = {
-  id: string; status: string; startDate: string; endDate: string; timezone: string; sessionMinutes: number; weekdays: number[]; startTime: string; summary: PlanSummary | null;
-  phases: { position: number; kind: string; title: string; startDate: string; endDate: string }[];
+  id: string; status: string; startDate: string; endDate: string; timezone: string; sessionMinutes: number; dailyStudyMinutes: number; breakMinutes: number; flexibility: string; autoReschedule: boolean;
+  weekdays: number[]; startTime: string; summary: PlanSummary | null;
+  phases: { position: number; kind: string; title: string; objective: string; startDate: string; endDate: string }[];
   items: PlanItemView[]; today: PlanItemView[]; catalogOutdated: boolean;
 };
 
@@ -215,13 +216,14 @@ export async function getPlanView(userId: string, now: Date = new Date()): Promi
   ]);
   const today = localDateOf(now, plan.timezone);
   const items: PlanItemView[] = rows.map((i) => ({
-    id: i.id, date: iso(i.date), kind: i.kind, status: i.status, minutes: i.minutes, title: i.title, objective: i.objective, weekNumber: i.weekNumber, departmentCode: i.department?.code ?? null,
+    id: i.id, date: iso(i.date), slotIndex: i.slotIndex, time: localTimeOf(i.startAt, plan.timezone), kind: i.kind, status: i.status, minutes: i.minutes, title: i.title, objective: i.objective, weekNumber: i.weekNumber, departmentCode: i.department?.code ?? null,
     missionCode: i.mission?.code ?? null, stepFrom: i.stepFrom, stepTo: i.stepTo, continuesPrev: i.continuesPrev, practised: i.practisedAt !== null, done: derivedDone(i), rescheduledFromId: i.rescheduledFromId,
   }));
   return {
-    id: plan.id, status: plan.status, startDate: iso(plan.startDate), endDate: iso(plan.endDate), timezone: plan.timezone, sessionMinutes: plan.sessionMinutes, weekdays: plan.weekdays, startTime: plan.startTime,
+    id: plan.id, status: plan.status, startDate: iso(plan.startDate), endDate: iso(plan.endDate), timezone: plan.timezone, sessionMinutes: plan.sessionMinutes, dailyStudyMinutes: plan.dailyStudyMinutes, breakMinutes: plan.breakMinutes, flexibility: plan.flexibility, autoReschedule: plan.autoReschedule,
+    weekdays: plan.weekdays, startTime: plan.startTime,
     summary: (plan.summary as unknown as PlanSummary) ?? null,
-    phases: phases.map((p) => ({ position: p.position, kind: p.kind, title: p.title, startDate: iso(p.startDate), endDate: iso(p.endDate) })),
+    phases: phases.map((p) => ({ position: p.position, kind: p.kind, title: p.title, objective: p.objective, startDate: iso(p.startDate), endDate: iso(p.endDate) })),
     items, today: items.filter((i) => i.date === today && i.status === "PLANNED"), catalogOutdated: !!plan.catalogVersion && plan.catalogVersion !== catalogVersion,
   };
 }

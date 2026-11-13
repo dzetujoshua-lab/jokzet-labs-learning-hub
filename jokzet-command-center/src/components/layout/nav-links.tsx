@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BellRing, ClipboardCheck, Gauge, Images, Layers, LayoutGrid, ListChecks, Settings } from "lucide-react";
+import { BarChart3, BellRing, CalendarDays, ClipboardCheck, Gauge, Images, Layers, LayoutGrid, ListChecks, Settings } from "lucide-react";
 
 // Navigation structure and order are unchanged from the Base44 export (src/components/Layout.jsx).
 const NAV = [
@@ -20,13 +20,18 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ] as const;
 
+/** Shown only to learners on the personalised programme (decided on the server). Placed after Missions; nothing else moves. */
+const TIMETABLE = { to: "/timetable", label: "Timetable", icon: CalendarDays, end: false } as const;
+type NavItem = { to: string; label: string; icon: (typeof NAV)[number]["icon"]; end: boolean };
+const navFor = (showTimetable?: boolean): readonly NavItem[] => (showTimetable ? [NAV[0], NAV[1], TIMETABLE, ...NAV.slice(2)] : NAV);
+
 const isActive = (pathname: string | null, to: string, end: boolean) =>
   pathname === null ? false : end ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
 
-function DesktopLinks({ pathname }: { pathname: string | null }) {
+function DesktopLinks({ pathname, showTimetable }: { pathname: string | null; showTimetable?: boolean }) {
   return (
     <nav aria-label="Primary" className="flex-1 space-y-1 px-3">
-      {NAV.map(({ to, label, icon: Icon, end }) => {
+      {navFor(showTimetable).map(({ to, label, icon: Icon, end }) => {
         const active = isActive(pathname, to, end);
         return (
           <Link
@@ -46,10 +51,10 @@ function DesktopLinks({ pathname }: { pathname: string | null }) {
   );
 }
 
-function MobileLinks({ pathname }: { pathname: string | null }) {
+function MobileLinks({ pathname, showTimetable }: { pathname: string | null; showTimetable?: boolean }) {
   return (
     <nav aria-label="Primary" className="flex gap-1.5 overflow-x-auto px-4 pb-3">
-      {NAV.map(({ to, label, end }) => {
+      {navFor(showTimetable).map(({ to, label, end }) => {
         const active = isActive(pathname, to, end);
         return (
           <Link
@@ -68,25 +73,25 @@ function MobileLinks({ pathname }: { pathname: string | null }) {
   );
 }
 
-function DesktopWithPath() {
-  return <DesktopLinks pathname={usePathname()} />;
+function DesktopWithPath({ showTimetable }: { showTimetable?: boolean }) {
+  return <DesktopLinks pathname={usePathname()} showTimetable={showTimetable} />;
 }
-function MobileWithPath() {
-  return <MobileLinks pathname={usePathname()} />;
+function MobileWithPath({ showTimetable }: { showTimetable?: boolean }) {
+  return <MobileLinks pathname={usePathname()} showTimetable={showTimetable} />;
 }
 
 /** usePathname() is runtime data; the Suspense fallback renders the same links without an active state. */
-export function DesktopNav() {
+export function DesktopNav({ showTimetable }: { showTimetable?: boolean } = {}) {
   return (
-    <Suspense fallback={<DesktopLinks pathname={null} />}>
-      <DesktopWithPath />
+    <Suspense fallback={<DesktopLinks pathname={null} showTimetable={showTimetable} />}>
+      <DesktopWithPath showTimetable={showTimetable} />
     </Suspense>
   );
 }
-export function MobileNav() {
+export function MobileNav({ showTimetable }: { showTimetable?: boolean } = {}) {
   return (
-    <Suspense fallback={<MobileLinks pathname={null} />}>
-      <MobileWithPath />
+    <Suspense fallback={<MobileLinks pathname={null} showTimetable={showTimetable} />}>
+      <MobileWithPath showTimetable={showTimetable} />
     </Suspense>
   );
 }

@@ -7,11 +7,16 @@ export function AppShell({
   sidebarProgress,
   mobileLevel,
   signOut,
+  desktopNav = <DesktopNav />,
+  mobileNav = <MobileNav />,
 }: {
   children: React.ReactNode;
   sidebarProgress: React.ReactNode;
   mobileLevel: React.ReactNode;
   signOut: React.ReactNode;
+  /** The primary navigation. The layout passes a version that knows whether to show the Timetable link. */
+  desktopNav?: React.ReactNode;
+  mobileNav?: React.ReactNode;
 }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
@@ -30,7 +35,7 @@ export function AppShell({
           </div>
         </div>
 
-        <DesktopNav />
+        {desktopNav}
 
         <div className="border-t border-border px-5 py-5">
           {sidebarProgress}
@@ -50,7 +55,7 @@ export function AppShell({
             </div>
             {mobileLevel}
           </div>
-          <MobileNav />
+          {mobileNav}
         </header>
 
         <main className="mx-auto w-full max-w-[1180px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
