@@ -47,6 +47,27 @@ enum MissionStatus {
   ARCHIVED
 }
 
+/// What kind of activity a Mission row is. Curriculum missions are platform-authored; the other two are owned by one learner.
+enum ActivityCategory {
+  CURRICULUM_MISSION
+  PERSONAL_ACTIVITY
+  RECOMMENDED_CHALLENGE
+}
+
+/// How the activity entered the learner's workspace. Category says what it is; origin says how it arrived.
+enum ActivityOrigin {
+  LEARNING_PLAN
+  LEARNER_CREATED
+  PLATFORM_RECOMMENDATION
+  ADMIN_ASSIGNED
+}
+
+enum RecommendationStatus {
+  OFFERED
+  ACCEPTED
+  DISMISSED
+}
+
 enum MissionPhase {
   WATCH
   DO
@@ -189,34 +210,35 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  profile            Profile?
-  sessions           Session[]
-  departmentProgress LearnerDepartment[]
-  learnerMissions    LearnerMission[]
-  submissions        Submission[]
-  submissionFiles    SubmissionFile[]
-  assessments        Assessment[]              @relation("AssessmentLearner")
-  assessed           Assessment[]              @relation("AssessmentAssessor")
-  feedback           Feedback[]
-  skills             UserSkill[]
-  achievements       UserAchievement[]
-  activity           ActivityRecord[]
-  reminders          Reminder[]
-  notifications      Notification[]
-  portfolioProjects  PortfolioProject[]
-  capstones          CapstoneProject[]
-  customMissions     Mission[]                 @relation("CustomMissions")
-  scheduleConfigs    ScheduleConfig[]
-  dailyMissions      DailyMissionInstance[]
-  completionRecords  MissionCompletionRecord[]
-  reminderSettings   ReminderSettings?
-  pushSubscriptions  PushSubscription[]
-  evidenceItems      EvidenceItem[]
-  bosCustomers       BosCustomer[]
-  bosSuppliers       BosSupplier[]
-  bosProducts        BosProduct[]
-  bosSales           BosSale[]
-  bosExpenses        BosExpense[]
+  profile                 Profile?
+  sessions                Session[]
+  departmentProgress      LearnerDepartment[]
+  learnerMissions         LearnerMission[]
+  submissions             Submission[]
+  submissionFiles         SubmissionFile[]
+  assessments             Assessment[]              @relation("AssessmentLearner")
+  assessed                Assessment[]              @relation("AssessmentAssessor")
+  feedback                Feedback[]
+  skills                  UserSkill[]
+  achievements            UserAchievement[]
+  activity                ActivityRecord[]
+  reminders               Reminder[]
+  notifications           Notification[]
+  portfolioProjects       PortfolioProject[]
+  capstones               CapstoneProject[]
+  customMissions          Mission[]                 @relation("CustomMissions")
+  scheduleConfigs         ScheduleConfig[]
+  dailyMissions           DailyMissionInstance[]
+  completionRecords       MissionCompletionRecord[]
+  reminderSettings        ReminderSettings?
+  pushSubscriptions       PushSubscription[]
+  evidenceItems           EvidenceItem[]
+  bosCustomers            BosCustomer[]
+  bosSuppliers            BosSupplier[]
+  bosProducts             BosProduct[]
+  bosSales                BosSale[]
+  bosExpenses             BosExpense[]
+  activityRecommendations ActivityRecommendation[]
 }
 
 model Session {
@@ -312,30 +334,32 @@ model Skill {
 }
 
 model Mission {
-  id                     String        @id @default(cuid())
-  code                   String?       @unique // curriculum missions only, e.g. FSWD-L0-01
+  id                     String           @id @default(cuid())
+  code                   String?          @unique // curriculum missions only, e.g. FSWD-L0-01
   departmentId           String
   levelId                String? // null for learner-created missions
   createdById            String? // null = curriculum mission; set = learner-created (Base44 "New mission")
   title                  String
   objective              String? // curriculum missions must have the fields below; enforced by the seed validator
-  durationMinutes        Int           @default(45)
-  kind                   MissionKind   @default(BUILD)
-  evidenceType           EvidenceType  @default(SCREENSHOT)
-  xpReward               Int           @default(25)
+  durationMinutes        Int              @default(45)
+  kind                   MissionKind      @default(BUILD)
+  evidenceType           EvidenceType     @default(SCREENSHOT)
+  xpReward               Int              @default(25)
   requiredTools          String[]
   experimentChallenge    String?
   submissionRequirements String?
   remediation            String?
   notes                  String?
   weekday                Int? // 0 = Sunday … 6 = Saturday, informs the weekly schedule
-  sortOrder              Int           @default(0)
-  isPublished            Boolean       @default(false)
-  status                 MissionStatus @default(DRAFT) // kept in sync with isPublished: status = PUBLISHED exactly when isPublished
+  sortOrder              Int              @default(0)
+  isPublished            Boolean          @default(false)
+  status                 MissionStatus    @default(DRAFT) // kept in sync with isPublished: status = PUBLISHED exactly when isPublished
+  category               ActivityCategory @default(CURRICULUM_MISSION) // CHECK: CURRICULUM_MISSION exactly when createdById is null
+  origin                 ActivityOrigin   @default(LEARNING_PLAN)
 
-  department      Department         @relation(fields: [departmentId], references: [id])
-  level           Level?             @relation(fields: [levelId], references: [id])
-  createdBy       User?              @relation("CustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
+  department      Department               @relation(fields: [departmentId], references: [id])
+  level           Level?                   @relation(fields: [levelId], references: [id])
+  createdBy       User?                    @relation("CustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
   steps           MissionStep[]
   resources       Resource[]
   rubric          AssessmentRubric?
@@ -344,6 +368,7 @@ model Mission {
   reminders       Reminder[]
   portfolio       PortfolioProject[]
   evidence        EvidenceItem[]
+  recommendations ActivityRecommendation[]
 
   @@index([departmentId, levelId, sortOrder])
   @@index([createdById])
@@ -1019,4 +1044,27 @@ model RateLimitBucket {
 
   @@id([key, windowStart])
   @@index([windowStart])
+}
+
+// ─────────────── Recommended challenges ───────────────
+/// An optional extra activity the platform offers a learner, always pointing at an approved catalogue mission and
+/// always with a stated reason. Accepting it creates a learner-owned RECOMMENDED_CHALLENGE mission; it never changes
+/// what is mandatory.
+model ActivityRecommendation {
+  id                       String               @id @default(cuid())
+  userId                   String
+  missionId                String // the approved curriculum mission the challenge is derived from
+  reasonCode               String // WEAK_CRITERION | OPEN_CORRECTION
+  reasonDetail             String?
+  sourceAssessmentId       String?
+  status                   RecommendationStatus @default(OFFERED)
+  acceptedLearnerMissionId String?
+  createdAt                DateTime             @default(now())
+  resolvedAt               DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId, status])
+  @@index([userId, status])
 }

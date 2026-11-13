@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { waitForWindowRoom } from "./helpers/window";
 import { db } from "@/lib/db";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 
@@ -22,11 +23,12 @@ beforeAll(async () => {
   await clearBuckets();
 });
 beforeEach(async () => {
+  await waitForWindowRoom(60, 10_000); // the poll limits count per minute
   await clearBuckets();
   engine.tickUser.mockClear();
   engine.pendingForClient.mockClear();
   session.user = { id: "route-test-user", email: "x@example.test", displayName: "R", role: "LEARNER" };
-});
+}, 60_000);
 afterAll(async () => {
   await clearBuckets();
   await db.$disconnect();

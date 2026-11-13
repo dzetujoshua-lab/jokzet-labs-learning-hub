@@ -52,6 +52,10 @@ export function MissionRow({
           <Link href={`/missions/${mission.code}`} className={`block ${titleClass} hover:text-primary`}>
             {mission.title}
           </Link>
+        ) : mission.category !== "CURRICULUM_MISSION" ? (
+          <Link href={`/activities/${mission.id}`} className={`block ${titleClass} hover:text-primary`}>
+            {mission.title}
+          </Link>
         ) : (
           <p className={titleClass}>{mission.title}</p>
         )}

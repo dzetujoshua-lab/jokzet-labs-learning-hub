@@ -45,23 +45,32 @@ export type AnalyticsData = {
   departments: { code: string; name: string; xp: number; level: number; completed: number; total: number; minutes: number; averageScore: number | null }[];
   performance: { id: string; label: string; percentage: number; outcome: string; departmentCode: string; date: string }[];
   skillsByDepartment: { code: string; count: number }[];
+  /** Self-directed practice, reported separately and never added to the curriculum figures above. */
+  practice: { personal: PracticeTotals; challenges: PracticeTotals };
 };
+
+export type PracticeTotals = { completed: number; minutes: number; assessed: number };
 
 const avg = (values: number[]) => (values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null);
 
 export async function getAnalytics(userId: string, now: Date = new Date()): Promise<AnalyticsData> {
   const today = todayISO(now);
-  const [missions, daily, assessments, skills, learnerDepts, curriculumTotals] = await Promise.all([
+  const [missions, practiceRows, daily, assessments, skills, learnerDepts, curriculumTotals] = await Promise.all([
+    // Curriculum missions only: personal activities and recommended challenges are practice and are reported separately.
     db.learnerMission.findMany({
-      where: { userId, status: { in: ["COMPLETED", "PASSED"] }, completedAt: { not: null } },
+      where: { userId, status: { in: ["COMPLETED", "PASSED"] }, completedAt: { not: null }, mission: { category: "CURRICULUM_MISSION" } },
       select: { completedAt: true, minutesSpent: true, mission: { select: { durationMinutes: true, department: { select: { code: true } } } } },
+    }),
+    db.learnerMission.findMany({
+      where: { userId, status: { in: ["COMPLETED", "PASSED"] }, completedAt: { not: null }, mission: { category: { not: "CURRICULUM_MISSION" } } },
+      select: { status: true, minutesSpent: true, mission: { select: { category: true, durationMinutes: true } } },
     }),
     db.dailyMissionInstance.findMany({
       where: { userId },
       select: { status: true, completedAt: true, template: { select: { durationMinutes: true } } },
     }),
     db.assessment.findMany({
-      where: { userId },
+      where: { userId, rubric: { mission: { category: "CURRICULUM_MISSION" } } },
       orderBy: { assessedAt: "asc" },
       select: { id: true, percentage: true, outcome: true, assessedAt: true, rubric: { select: { mission: { select: { title: true, department: { select: { code: true } } } } } } },
     }),
@@ -153,5 +162,18 @@ export async function getAnalytics(userId: string, now: Date = new Date()): Prom
       date: localDate(a.assessedAt),
     })),
     skillsByDepartment: [...skillsByDept.entries()].map(([code, count]) => ({ code, count })),
+    practice: practiceTotals(practiceRows),
   };
+}
+
+function practiceTotals(rows: { status: string; minutesSpent: number; mission: { category: string; durationMinutes: number } }[]) {
+  const sum = (category: string): PracticeTotals => {
+    const mine = rows.filter((r) => r.mission.category === category);
+    return {
+      completed: mine.length,
+      minutes: mine.reduce((t, r) => t + (r.minutesSpent > 0 ? r.minutesSpent : r.mission.durationMinutes), 0),
+      assessed: mine.filter((r) => r.status === "PASSED").length,
+    };
+  };
+  return { personal: sum("PERSONAL_ACTIVITY"), challenges: sum("RECOMMENDED_CHALLENGE") };
 }

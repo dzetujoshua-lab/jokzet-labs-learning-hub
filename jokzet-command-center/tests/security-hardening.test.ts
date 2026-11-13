@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { waitForWindowRoom } from "./helpers/window";
 import { db } from "@/lib/db";
 import { authenticate, registerUser } from "@/lib/auth/service";
 import { createCustomMission, deleteMission, getTotalXp, setMissionDone } from "@/lib/missions/service";
@@ -117,6 +118,12 @@ describe("rate limiter", () => {
 });
 
 describe("sign-in: no account oracle, no lockout abuse", () => {
+  // These tests fill fixed 15-minute and 1-hour windows; do not start one just before the window rolls over.
+  beforeEach(async () => {
+    await waitForWindowRoom(15 * 60);
+    await waitForWindowRoom(60 * 60);
+  }, 120_000);
+
   it("returns an identical result for unknown email, wrong password and a disabled account", async () => {
     await registerUser({ displayName: "Sec", email: mail("uniform"), password: PASSWORD });
     const ip = "198.51.100.10";

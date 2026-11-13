@@ -30,7 +30,7 @@ export type EvidenceChip = { id: string; title: string; kind: string };
 function EvidenceSection({
   learnerMissionId, missionCode, departmentCode, departments, today, attached, available,
 }: {
-  learnerMissionId: string; missionCode: string; departmentCode: string; departments: { code: string; name: string }[]; today: string;
+  learnerMissionId: string; missionCode?: string; departmentCode: string; departments: { code: string; name: string }[]; today: string;
   attached: EvidenceChip[]; available: EvidenceChip[];
 }) {
   const [pick, setPick] = useState("");
@@ -83,7 +83,7 @@ export function MissionWorkspace({
   notes: string;
   canSubmit: boolean;
   lockedReason?: string;
-  missionCode: string;
+  missionCode?: string;
   departmentCode: string;
   departments: { code: string; name: string }[];
   today: string;

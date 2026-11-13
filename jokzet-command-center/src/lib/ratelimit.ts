@@ -100,4 +100,5 @@ export const LIMITS = {
   testNotificationUser: { limit: 10, windowSeconds: 60 * 60 },
   pendingTick: { limit: 1, windowSeconds: 20 }, // reminder bookkeeping at most once per 20 s per learner
   pendingUser: { limit: 30, windowSeconds: 60 }, // polls per minute per learner (client polls twice a minute)
+  activityCreateUser: { limit: 30, windowSeconds: 60 * 60 }, // creating personal activities and accepting challenges
 } as const satisfies Record<string, Limit>;
