@@ -1,4 +1,5 @@
 import { BrandLogo } from "@/components/brand-logo";
+import { LegalFooter } from "@/components/legal-footer";
 import { DesktopNav, MobileNav } from "./nav-links";
 
 /** Layout copied from the Base44 export (src/components/Layout.jsx): 248px sidebar, sticky mobile header, 1180px main. */
@@ -59,6 +60,7 @@ export function AppShell({
         </header>
 
         <main className="mx-auto w-full max-w-[1180px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10">{children}</main>
+        <LegalFooter className="mx-auto w-full max-w-[1180px] px-4 pb-8 sm:px-6 lg:px-10" />
       </div>
     </div>
   );

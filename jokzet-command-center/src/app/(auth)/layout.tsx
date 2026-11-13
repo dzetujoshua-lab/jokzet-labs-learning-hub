@@ -1,4 +1,5 @@
 import { BrandLogo } from "@/components/brand-logo";
+import { LegalFooter } from "@/components/legal-footer";
 
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
@@ -17,6 +18,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <p className="text-center font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
           Build Beyond Possible.
         </p>
+        <LegalFooter className="text-center" />
       </div>
     </main>
   );

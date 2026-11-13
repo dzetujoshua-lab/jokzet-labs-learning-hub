@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth/cookie";
 
-const PUBLIC_PATHS = ["/login", "/register"];
+// /privacy-policy is public on purpose: anyone (including a reviewer who is not signed in) must be able to read it.
+const PUBLIC_PATHS = ["/login", "/register", "/privacy-policy"];
 
 /**
  * Optimistic check only: it looks for the cookie's presence to redirect early.
