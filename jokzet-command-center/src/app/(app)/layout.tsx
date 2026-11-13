@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/components/layout/auth-gate";
+import { NavGate } from "@/components/layout/nav-gate";
+import { DesktopNav, MobileNav } from "@/components/layout/nav-links";
 import { MobileLevel, SidebarProgress, SidebarProgressFallback, SignOutButton } from "@/components/layout/sidebar-slots";
 import Loading from "./loading";
 
@@ -24,6 +26,16 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         </Suspense>
       }
       signOut={<SignOutButton />}
+      desktopNav={
+        <Suspense fallback={<DesktopNav />}>
+          <NavGate variant="desktop" />
+        </Suspense>
+      }
+      mobileNav={
+        <Suspense fallback={<MobileNav />}>
+          <NavGate variant="mobile" />
+        </Suspense>
+      }
     >
       <Suspense fallback={<Loading />}>
         <AuthGate>{children}</AuthGate>

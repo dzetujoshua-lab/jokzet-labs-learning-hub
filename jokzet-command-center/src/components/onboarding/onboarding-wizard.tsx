@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { completeOnboardingAction, saveOnboardingAction, skipBaselineAction, startBaselineAction } from "@/app/onboarding/actions";
+import { finishOnboardingAction, saveOnboardingAction, skipBaselineAction, startBaselineAction } from "@/app/onboarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -234,7 +234,7 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
         ) : step === 3 ? (
           <Button disabled={pending} onClick={save}>{pending ? "Saving…" : "Save and continue"}</Button>
         ) : (
-          <Button disabled={pending} onClick={() => run(() => completeOnboardingAction(), () => { toast.success("Setup saved"); router.push("/"); router.refresh(); })}>
+          <Button disabled={pending} onClick={() => run(() => finishOnboardingAction(), () => { toast.success("Setup saved"); router.push("/"); router.refresh(); })}>
             {pending ? "Finishing…" : "Finish setup"}
           </Button>
         )}
