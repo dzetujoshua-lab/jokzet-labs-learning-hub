@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { seatsFor } from "@/lib/plan/availability";
 import { allocateByWeight, daysBetween, percentOf, phaseCount, reserves, slotDates, weekNumberOf } from "@/lib/plan/capacity";
 import { generatePlan, inputHashOf, missionUnits, packMission, type CatalogMission, type GenerateInput } from "@/lib/plan/generate";
 import { itemDone, rebalance, type RebalanceItem } from "@/lib/plan/rebalance";
@@ -29,7 +30,7 @@ const catalogFor = (depts: string[], perDept: number) => depts.flatMap((d) => Ar
 
 function input(over: Partial<GenerateInput> = {}): GenerateInput {
   return {
-    timezone: "Africa/Accra", startDate: "2026-12-07", durationDays: 30, experience: "BEGINNER", sessionMinutes: 45, weekdays: [1, 3, 5], startTime: "18:00",
+    timezone: "Africa/Accra", startDate: "2026-12-07", durationDays: 30, experience: "BEGINNER", sessionMinutes: 45, dailyStudyMinutes: 0, breakMinutes: 0, weekdays: [1, 3, 5], startTime: "18:00",
     goals: [{ departmentCode: "fswd", weight: 3, targetLevel: 1 }, { departmentCode: "sec", weight: 1, targetLevel: 1 }],
     placement: {}, baselinePending: [], catalog: catalogFor(["fswd", "sec"], 6), catalogVersion: "v1", passed: [], ...over,
   };
@@ -315,12 +316,12 @@ describe("reminder instants and daylight saving time", () => {
 });
 
 describe("missed sessions", () => {
-  const item = (id: string, date: string, position: number, kind: RebalanceItem["kind"], over: Partial<RebalanceItem> = {}): RebalanceItem => ({ id, date, position, kind, status: "PLANNED", rescheduledFromId: null, done: false, ...over });
-  const slots = ["2026-12-07", "2026-12-09", "2026-12-11", "2026-12-14", "2026-12-16", "2026-12-18"];
+  const item = (id: string, date: string, position: number, kind: RebalanceItem["kind"], over: Partial<RebalanceItem> = {}): RebalanceItem => ({ id, date, slotIndex: 0, position, kind, status: "PLANNED", rescheduledFromId: null, done: false, ...over });
+  const slots = seatsFor(["2026-12-07", "2026-12-09", "2026-12-11", "2026-12-14", "2026-12-16", "2026-12-18"], 1);
 
   it("marks undone teaching sessions before today as missed and adds catch-ups in the original order", () => {
     const items = [item("a", "2026-12-07", 1, "TEACHING"), item("b", "2026-12-09", 2, "TEACHING"), item("c", "2026-12-11", 3, "TEACHING", { done: true }), item("d", "2026-12-14", 4, "PRACTICE"), item("e", "2026-12-16", 5, "REVIEW"), item("f", "2026-12-18", 6, "TEACHING")];
-    const r = rebalance({ items, today: "2026-12-12", slots });
+    const r = rebalance({ items, today: "2026-12-12", seats: slots });
     expect(r.markMissed).toEqual(["a", "b"]);
     expect(r.catchUps.map((c) => c.rescheduledFromId)).toEqual(["a", "b"]);
     expect(r.catchUps.map((c) => c.date)).toEqual(["2026-12-14", "2026-12-16"]); // practice gives way first, then review
@@ -330,7 +331,7 @@ describe("missed sessions", () => {
 
   it("never displaces teaching work and reports what did not fit", () => {
     const items = [item("a", "2026-12-07", 1, "TEACHING"), item("b", "2026-12-09", 2, "TEACHING"), item("c", "2026-12-14", 4, "TEACHING"), item("d", "2026-12-16", 5, "TEACHING"), item("e", "2026-12-18", 6, "TEACHING")];
-    const r = rebalance({ items, today: "2026-12-10", slots });
+    const r = rebalance({ items, today: "2026-12-10", seats: slots });
     expect(r.cancel).toEqual([]);
     expect(r.catchUps.map((c) => c.date)).toEqual(["2026-12-11"]); // the only free slot
     expect(r.shortfall).toEqual(["b"]);
@@ -338,15 +339,15 @@ describe("missed sessions", () => {
 
   it("is idempotent: once a catch-up exists nothing new is created, and past items are never touched", () => {
     const items = [item("a", "2026-12-07", 1, "TEACHING", { status: "MISSED" }), item("x", "2026-12-14", 7, "CATCH_UP", { rescheduledFromId: "a" }), item("y", "2026-12-16", 8, "TEACHING")];
-    const r = rebalance({ items, today: "2026-12-12", slots });
+    const r = rebalance({ items, today: "2026-12-12", seats: slots });
     expect(r).toEqual({ markMissed: [], catchUps: [], cancel: [], shortfall: [] });
-    const again = rebalance({ items, today: "2026-12-12", slots });
+    const again = rebalance({ items, today: "2026-12-12", seats: slots });
     expect(again).toEqual(r);
   });
 
   it("ignores practice and review that were not done: they are never 'missed'", () => {
     const items = [item("p", "2026-12-07", 1, "PRACTICE"), item("r", "2026-12-09", 2, "REVIEW")];
-    expect(rebalance({ items, today: "2026-12-12", slots })).toEqual({ markMissed: [], catchUps: [], cancel: [], shortfall: [] });
+    expect(rebalance({ items, today: "2026-12-12", seats: slots })).toEqual({ markMissed: [], catchUps: [], cancel: [], shortfall: [] });
   });
 
   it("derives 'done' from the learner's mission, never from the item", () => {

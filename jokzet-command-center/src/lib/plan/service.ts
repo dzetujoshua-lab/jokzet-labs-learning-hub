@@ -1,7 +1,8 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
-import { addDaysISO, localDateOf, startInstant } from "@/lib/schedule/time";
+import { addDaysISO, localDateOf } from "@/lib/schedule/time";
+import { seatsFor, sessionInstant, sessionsPerDay } from "./availability";
 import { daysBetween, slotDates, weekNumberOf } from "./capacity";
 import { loadCatalog } from "./catalog";
 import { generatePlan, GENERATOR_VERSION, inputHashOf, type DraftItem, type DraftPhase, type GenerateInput, type PlanDraft, type PlanSummary } from "./generate";
@@ -19,6 +20,11 @@ class Stop extends Error {}
 
 const MAX_ITEMS = 1200;
 const asDate = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+type Availability = { startTime: string; sessionMinutes: number; breakMinutes: number; dailyStudyMinutes: number; timezone: string };
+/** The UTC instant of one session of a plan (wall-clock intent kept; later sessions of a day may cross midnight). */
+const instantOf = (p: Availability, date: string, slotIndex: number, timezone: string = p.timezone) => sessionInstant(date, slotIndex, p.startTime, p.sessionMinutes, p.breakMinutes, timezone);
+const perDayOf = (p: Availability) => sessionsPerDay(p.dailyStudyMinutes, p.sessionMinutes, p.breakMinutes);
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 type Tx = Prisma.TransactionClient;
 
@@ -42,7 +48,7 @@ async function requirePersonalised(userId: string): Promise<Result> {
 /** Everything the generator needs, read for one learner. */
 async function buildInput(
   client: Tx | typeof db, userId: string,
-  plan: { experience: GenerateInput["experience"]; sessionMinutes: number; weekdays: number[]; startTime: string; timezone: string },
+  plan: { experience: GenerateInput["experience"]; sessionMinutes: number; dailyStudyMinutes: number; breakMinutes: number; weekdays: number[]; startTime: string; timezone: string },
   goals: { departmentCode: string; weight: number; targetLevel: number }[],
   startDate: string, durationDays: number,
 ): Promise<{ input: GenerateInput }> {
@@ -60,7 +66,7 @@ async function buildInput(
   }
   return {
     input: {
-      timezone: plan.timezone, startDate, durationDays, experience: plan.experience, sessionMinutes: plan.sessionMinutes, weekdays: [...plan.weekdays].sort((a, b) => a - b),
+      timezone: plan.timezone, startDate, durationDays, experience: plan.experience, sessionMinutes: plan.sessionMinutes, dailyStudyMinutes: plan.dailyStudyMinutes, breakMinutes: plan.breakMinutes, weekdays: [...plan.weekdays].sort((a, b) => a - b),
       startTime: plan.startTime, goals: goals.map((g) => ({ departmentCode: g.departmentCode, weight: g.weight, targetLevel: g.targetLevel })), placement,
       baselinePending: goals.map((g) => g.departmentCode).filter((c) => !settled.has(c)), catalog, catalogVersion, passed: passedRows.map((p) => p.missionId),
     },
@@ -76,7 +82,7 @@ async function storeDraft(tx: Tx, planId: string, userId: string, draft: PlanDra
   }
   await tx.learningPlanItem.createMany({
     data: draft.items.map((i: DraftItem) => ({
-      planId, userId, phaseId: phaseIds[i.phaseIndex], date: asDate(i.date), startAt: i.startAt, position: i.position, kind: i.kind, minutes: i.minutes, title: i.title, objective: i.objective,
+      planId, userId, phaseId: phaseIds[i.phaseIndex], date: asDate(i.date), startAt: i.startAt, position: i.position, slotIndex: i.slotIndex, kind: i.kind, minutes: i.minutes, title: i.title, objective: i.objective,
       weekNumber: i.weekNumber, departmentId: i.departmentCode ? (catalogDepartments.get(i.departmentCode) ?? null) : null,
       missionId: i.missionId, stepFrom: i.stepFrom, stepTo: i.stepTo, continuesPrev: i.continuesPrev,
     })),
@@ -157,8 +163,8 @@ export async function activatePlan(userId: string): Promise<Result<{ planId: str
       // The live time zone is the reminder settings'; the plan keeps a snapshot, and its reminder instants follow it.
       const settings = await ensureReminderSettings(tx, userId, plan.timezone);
       if (settings.timezone !== plan.timezone) {
-        const items = await tx.learningPlanItem.findMany({ where: { planId: plan.id, userId }, select: { id: true, date: true } });
-        for (const i of items) await tx.learningPlanItem.update({ where: { id: i.id }, data: { startAt: startInstant(iso(i.date), plan.startTime, settings.timezone) } });
+        const items = await tx.learningPlanItem.findMany({ where: { planId: plan.id, userId }, select: { id: true, date: true, slotIndex: true } });
+        for (const i of items) await tx.learningPlanItem.update({ where: { id: i.id }, data: { startAt: instantOf(plan, iso(i.date), i.slotIndex, settings.timezone) } });
       }
       await tx.scheduleConfig.updateMany({ where: { userId, isActive: true }, data: { isActive: false } }); // one reminder source at a time
       await linkLearnerMissions(tx, userId, plan.id);
@@ -242,9 +248,11 @@ export async function reconcilePlan(userId: string, now: Date = new Date()): Pro
   if (!plan) return { ok: true, missed: 0, catchUps: 0, shortfall: 0 };
   const today = localDateOf(now, plan.timezone);
   const rows = await itemsWithState(userId, plan.id);
-  const slots = slotDates(iso(plan.startDate), plan.durationDays, plan.weekdays);
-  const input: RebalanceItem[] = rows.map((i) => ({ id: i.id, date: iso(i.date), position: i.position, kind: i.kind, status: i.status, rescheduledFromId: i.rescheduledFromId, done: derivedDone(i) }));
-  const r = rebalance({ items: input, today, slots });
+  const seats = seatsFor(slotDates(iso(plan.startDate), plan.durationDays, plan.weekdays), perDayOf(plan));
+  const input: RebalanceItem[] = rows.map((i) => ({ id: i.id, date: iso(i.date), slotIndex: i.slotIndex, position: i.position, kind: i.kind, status: i.status, rescheduledFromId: i.rescheduledFromId, done: derivedDone(i) }));
+  // The learner decides whether the Academy may reschedule for them: without permission sessions are still marked MISSED
+  // (a record of what happened) but no catch-ups are added.
+  const r = rebalance({ items: input, today, seats, autoCatchUp: plan.autoReschedule });
   if (!r.markMissed.length && !r.catchUps.length && !r.cancel.length) return { ok: true, missed: 0, catchUps: 0, shortfall: r.shortfall.length };
 
   const phases = await db.learningPlanPhase.findMany({ where: { planId: plan.id, userId }, orderBy: { position: "asc" } });
@@ -262,7 +270,7 @@ export async function reconcilePlan(userId: string, now: Date = new Date()): Pro
       position += 1;
       const created = await tx.learningPlanItem.create({
         data: {
-          planId: plan.id, userId, phaseId: phase.id, date: asDate(c.date), startAt: startInstant(c.date, plan.startTime, plan.timezone), position, kind: "CATCH_UP", minutes: m.minutes,
+          planId: plan.id, userId, phaseId: phase.id, date: asDate(c.date), startAt: instantOf(plan, c.date, c.slotIndex), position, slotIndex: c.slotIndex, kind: "CATCH_UP", minutes: m.minutes,
           title: m.title.startsWith("Catch-up: ") ? m.title : `Catch-up: ${m.title}`, objective: m.objective, weekNumber: weekNumberOf(c.date, iso(plan.startDate)), departmentId: m.departmentId,
           missionId: m.missionId, learnerMissionId: m.learnerMissionId, stepFrom: m.stepFrom, stepTo: m.stepTo, continuesPrev: m.continuesPrev, rescheduledFromId: m.id,
         },
@@ -305,15 +313,15 @@ export async function resumePlan(userId: string, now: Date = new Date()): Promis
       let moved = 0;
       if (rows.length) {
         const span = Math.max(14, rows.length * 7 + 14);
-        const newSlots = slotDates(today, span, plan.weekdays).slice(0, rows.length);
-        if (newSlots.length < rows.length) throw new Stop("Could not find room for the remaining sessions.");
+        const newSeats = seatsFor(slotDates(today, span, plan.weekdays), perDayOf(plan)).slice(0, rows.length);
+        if (newSeats.length < rows.length) throw new Stop("Could not find room for the remaining sessions.");
         for (const [k, row] of rows.entries()) {
-          const date = newSlots[k];
-          if (date === iso(row.date)) continue;
-          await tx.learningPlanItem.update({ where: { id: row.id }, data: { date: asDate(date), startAt: startInstant(date, plan.startTime, plan.timezone), weekNumber: weekNumberOf(date, iso(plan.startDate)) } });
+          const { date, index } = newSeats[k];
+          if (date === iso(row.date) && index === row.slotIndex) continue;
+          await tx.learningPlanItem.update({ where: { id: row.id }, data: { date: asDate(date), slotIndex: index, startAt: instantOf(plan, date, index), weekNumber: weekNumberOf(date, iso(plan.startDate)) } });
           moved += 1;
         }
-        const last = newSlots[newSlots.length - 1];
+        const last = newSeats[newSeats.length - 1].date;
         if (last > iso(plan.endDate)) await tx.learningPlan.update({ where: { id: plan.id }, data: { endDate: asDate(last), durationDays: daysBetween(iso(plan.startDate), last) + 1 } });
         // Keep every phase's dates in step with its sessions.
         for (const phase of await tx.learningPlanPhase.findMany({ where: { planId: plan.id, userId } })) {
@@ -399,7 +407,7 @@ async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS
       const created = await tx.learningPlan.create({
         data: {
           userId, status: "ACTIVE", activeKey: userId, parentPlanId: old.id, durationKind: "CUSTOM", durationDays, startDate: asDate(today), endDate: asDate(addDaysISO(today, durationDays - 1)), timezone: old.timezone,
-          experience: old.experience, sessionMinutes: old.sessionMinutes, weekdays: old.weekdays, startTime: old.startTime, generatorVersion: GENERATOR_VERSION, catalogVersion: input.catalogVersion,
+          experience: old.experience, sessionMinutes: old.sessionMinutes, dailyStudyMinutes: old.dailyStudyMinutes, breakMinutes: old.breakMinutes, flexibility: old.flexibility, autoReschedule: old.autoReschedule, weekdays: old.weekdays, startTime: old.startTime, generatorVersion: GENERATOR_VERSION, catalogVersion: input.catalogVersion,
           inputHash: result.draft.inputHash, summary: result.draft.summary as unknown as Prisma.InputJsonValue, activatedAt: now,
         },
       });
@@ -430,9 +438,9 @@ export async function recomputePlanItemInstants(userId: string, timezone: string
   const plan = await loadPlan(db, userId, "ACTIVE");
   if (!plan) return 0;
   const today = localDateOf(now, timezone);
-  const rows = await db.learningPlanItem.findMany({ where: { planId: plan.id, userId, status: "PLANNED", date: { gte: asDate(today) } }, select: { id: true, date: true } });
+  const rows = await db.learningPlanItem.findMany({ where: { planId: plan.id, userId, status: "PLANNED", date: { gte: asDate(today) } }, select: { id: true, date: true, slotIndex: true } });
   await db.$transaction(async (tx) => {
-    for (const r of rows) await tx.learningPlanItem.update({ where: { id: r.id }, data: { startAt: startInstant(iso(r.date), plan.startTime, timezone) } });
+    for (const r of rows) await tx.learningPlanItem.update({ where: { id: r.id }, data: { startAt: instantOf(plan, iso(r.date), r.slotIndex, timezone) } });
     await tx.learningPlan.update({ where: { id: plan.id }, data: { timezone } });
   });
   return rows.length;

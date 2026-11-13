@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { startMission } from "@/lib/missions/progress";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import { placementFromPercentage } from "./baseline";
+import { ensureReminderSettings } from "./service";
 import { durationDaysFor, onboardingSchema, type OnboardingInput } from "./schema";
 
 /**
@@ -30,6 +31,10 @@ export type OnboardingState = {
   draft: {
     experience: "BEGINNER" | "IMPROVER" | "INTERMEDIATE" | "ADVANCED";
     sessionMinutes: number;
+    dailyStudyMinutes: number;
+    breakMinutes: number;
+    flexibility: "STRICT" | "BALANCED" | "FLEXIBLE";
+    autoReschedule: boolean;
     weekdays: number[];
     startTime: string;
     timezone: string;
@@ -63,6 +68,10 @@ export async function getOnboardingState(userId: string): Promise<OnboardingStat
       ? {
           experience: plan.experience,
           sessionMinutes: plan.sessionMinutes,
+          dailyStudyMinutes: plan.dailyStudyMinutes,
+          breakMinutes: plan.breakMinutes,
+          flexibility: plan.flexibility,
+          autoReschedule: plan.autoReschedule,
           weekdays: [...plan.weekdays].sort((a, b) => a - b),
           startTime: plan.startTime,
           timezone: plan.timezone,
@@ -118,6 +127,10 @@ export async function saveOnboarding(userId: string, input: OnboardingInput): Pr
     const base = {
       experience: d.experience,
       sessionMinutes: d.sessionMinutes,
+      dailyStudyMinutes: d.dailyStudyMinutes,
+      breakMinutes: d.breakMinutes,
+      flexibility: d.flexibility,
+      autoReschedule: d.autoReschedule,
       weekdays,
       startTime: d.startTime,
       timezone: d.timezone,
@@ -202,9 +215,14 @@ export async function skipBaseline(userId: string, departmentCode: string): Prom
 export async function completeOnboarding(userId: string): Promise<Result> {
   const mode = await requirePersonalised(userId);
   if (!mode.ok) return mode;
-  const plan = await db.learningPlan.findFirst({ where: { userId, status: "DRAFT" }, select: { _count: { select: { goals: true } } } });
+  const plan = await db.learningPlan.findFirst({ where: { userId, status: "DRAFT" }, select: { timezone: true, _count: { select: { goals: true } } } });
   if (!plan || plan._count.goals === 0) return fail("Save your goals before finishing.");
-  await db.profile.update({ where: { userId }, data: { onboardingStatus: "COMPLETE" } });
+  // Every personalised learner gets reminder settings here (not only when a plan is activated), so reminders can never depend
+  // on an imported schedule. An existing row is never overwritten.
+  await db.$transaction(async (tx) => {
+    await ensureReminderSettings(tx, userId, plan.timezone);
+    await tx.profile.update({ where: { userId }, data: { onboardingStatus: "COMPLETE" } });
+  });
   return { ok: true };
 }
 

@@ -48,6 +48,10 @@ export const onboardingSchema = z
     experience: z.enum(EXPERIENCE),
     goals: z.array(goal).min(1, "Choose at least one subject.").max(MAX_GOALS, `Choose at most ${MAX_GOALS} subjects.`),
     sessionMinutes: z.number().int().min(15).max(240),
+    dailyStudyMinutes: z.number().int().min(0).max(720).default(0), // study time available on a study day; 0 = one session a day
+    breakMinutes: z.number().int().min(0).max(60).default(0),
+    flexibility: z.enum(["STRICT", "BALANCED", "FLEXIBLE"]).default("BALANCED"),
+    autoReschedule: z.boolean().default(true),
     weekdays: z.array(z.number().int().min(0).max(6)).min(1, "Choose at least one day.").max(7),
     startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use the form HH:MM."),
     timezone: z.string().trim().min(1).max(64).refine(validTimezone, "Unknown time zone."),
@@ -58,6 +62,7 @@ export const onboardingSchema = z
   .superRefine((v, ctx) => {
     if (new Set(v.weekdays).size !== v.weekdays.length) ctx.addIssue({ code: "custom", path: ["weekdays"], message: "Each day can be chosen once." });
     if (new Set(v.goals.map((g) => g.departmentCode)).size !== v.goals.length) ctx.addIssue({ code: "custom", path: ["goals"], message: "Each subject can be chosen once." });
+    if (v.dailyStudyMinutes !== 0 && v.dailyStudyMinutes < v.sessionMinutes) ctx.addIssue({ code: "custom", path: ["dailyStudyMinutes"], message: "Daily study time must be at least one session (or 0 for one session a day)." });
     if (v.durationKind === "CUSTOM" && v.customDays === undefined) ctx.addIssue({ code: "custom", path: ["customDays"], message: "Enter the number of days (7 to 365)." });
     const noteText = v.goals.map((g) => g.note ?? "").join("\n");
     const secrets = detectSecrets(noteText);

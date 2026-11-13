@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { startInstant } from "@/lib/schedule/time";
+import { seatsFor, sessionInstant, sessionsPerDay } from "./availability";
 import { allocateByWeight, phaseCount, reserves, slotDates, weekNumberOf } from "./capacity";
 
 /**
@@ -31,6 +31,8 @@ export type GenerateInput = {
   durationDays: number;
   experience: "BEGINNER" | "IMPROVER" | "INTERMEDIATE" | "ADVANCED";
   sessionMinutes: number;
+  dailyStudyMinutes: number; // study time available on a study day; 0 = one session a day
+  breakMinutes: number; // gap between sessions on the same day
   weekdays: number[];
   startTime: string; // HH:mm
   goals: PlanGoalInput[]; // in department display order (used to break ties)
@@ -46,6 +48,7 @@ export type DraftItem = {
   date: string;
   startAt: Date;
   position: number;
+  slotIndex: number; // which session of the day (0 = first)
   phaseIndex: number;
   kind: ItemKind;
   minutes: number;
@@ -63,6 +66,7 @@ export type PlanSummary = {
   capacityMinutes: number;
   scheduledMinutes: number;
   slots: number;
+  sessionsPerDay: number;
   reserved: { baseline: number; review: number; checkpoint: number };
   shortfall: { departmentCode: string; sessions: number }[];
   coverage: { departmentCode: string; missionsPlanned: number; missionsAvailable: number }[];
@@ -177,7 +181,9 @@ const PHASE_OBJECTIVE: Record<DraftPhase["kind"], string> = {
 
 export function generatePlan(input: GenerateInput): GenerateResult {
   const L = input.sessionMinutes;
-  const slots = slotDates(input.startDate, input.durationDays, input.weekdays);
+  const perDay = sessionsPerDay(input.dailyStudyMinutes, L, input.breakMinutes);
+  const seats = seatsFor(slotDates(input.startDate, input.durationDays, input.weekdays), perDay);
+  const slots = seats.map((s) => s.date); // one entry per seat (a study day repeats once per session of that day)
   const S = slots.length;
   if (S < 2) return { ok: false, error: "Choose more days or a longer duration: this plan has fewer than two study sessions." };
   if (!input.goals.length) return { ok: false, error: "Choose at least one subject." };
@@ -333,7 +339,7 @@ export function generatePlan(input: GenerateInput): GenerateResult {
   slots.forEach((date, i) => {
     const t = taken.get(i);
     if (!t) return;
-    items.push({ date, startAt: startInstant(date, input.startTime, input.timezone), position: items.length + 1, phaseIndex: phaseOfSlot(i), weekNumber: weekOf[i], ...t });
+    items.push({ date, startAt: sessionInstant(date, seats[i].index, input.startTime, L, input.breakMinutes, input.timezone), slotIndex: seats[i].index, position: items.length + 1, phaseIndex: phaseOfSlot(i), weekNumber: weekOf[i], ...t });
   });
   const weekMap = new Map<number, { minutes: number; first: string }>();
   for (const it of items) {
@@ -347,6 +353,7 @@ export function generatePlan(input: GenerateInput): GenerateResult {
     capacityMinutes: S * L,
     scheduledMinutes: items.reduce((a, i) => a + i.minutes, 0),
     slots: S,
+    sessionsPerDay: perDay,
     reserved: { baseline: reservedBaseline, review: reservedReview, checkpoint: reservedCheckpoint },
     shortfall,
     coverage,
