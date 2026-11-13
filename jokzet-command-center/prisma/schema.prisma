@@ -1400,30 +1400,34 @@ enum BaselineStatus {
 /// duration, goals). The generator, phases and items arrive with Phase 7. `draftKey` / `activeKey` equal the user id while
 /// the plan is DRAFT / ACTIVE (CHECKs in the migration), which makes "one draft and one active plan per learner" a database rule.
 model LearningPlan {
-  id               String          @id @default(cuid())
-  userId           String
-  status           PlanStatus      @default(DRAFT)
-  draftKey         String?         @unique
-  activeKey        String?         @unique
-  parentPlanId     String?
-  durationKind     DurationKind
-  durationDays     Int
-  startDate        DateTime        @db.Date
-  endDate          DateTime        @db.Date
-  timezone         String
-  experience       ExperienceLevel
-  sessionMinutes   Int
-  weekdays         Int[] // 0 = Sunday .. 6 = Saturday
-  startTime        String // HH:mm local
-  generatorVersion Int             @default(0)
-  catalogVersion   String          @default("")
-  inputHash        String          @default("")
-  summary          Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  activatedAt      DateTime?
-  supersededAt     DateTime?
-  pausedAt         DateTime?
+  id                String                @id @default(cuid())
+  userId            String
+  status            PlanStatus            @default(DRAFT)
+  draftKey          String?               @unique
+  activeKey         String?               @unique
+  parentPlanId      String?
+  durationKind      DurationKind
+  durationDays      Int
+  startDate         DateTime              @db.Date
+  endDate           DateTime              @db.Date
+  timezone          String
+  experience        ExperienceLevel
+  sessionMinutes    Int
+  weekdays          Int[] // 0 = Sunday .. 6 = Saturday
+  startTime         String // HH:mm local
+  dailyStudyMinutes Int                   @default(0) // study time available per day; 0 = one session a day
+  breakMinutes      Int                   @default(0) // gap between sessions on the same day
+  flexibility       SchedulingFlexibility @default(BALANCED)
+  autoReschedule    Boolean               @default(true) // may the Academy add catch-ups and adjust future sessions itself
+  generatorVersion  Int                   @default(0)
+  catalogVersion    String                @default("")
+  inputHash         String                @default("")
+  summary           Json?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  activatedAt       DateTime?
+  supersededAt      DateTime?
+  pausedAt          DateTime?
 
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   goals     LearningGoal[]
@@ -1542,6 +1546,7 @@ model LearningPlanItem {
   date              DateTime       @db.Date
   startAt           DateTime // UTC instant of date + start time in the plan's time zone (drives reminders)
   position          Int
+  slotIndex         Int            @default(0) // which session of the day (0 = first)
   kind              PlanItemKind
   status            PlanItemStatus @default(PLANNED)
   minutes           Int
@@ -1587,4 +1592,10 @@ model LearningPlanEvent {
   plan LearningPlan @relation(fields: [planId, userId], references: [id, userId], onDelete: Cascade)
 
   @@index([planId, occurredAt])
+}
+
+enum SchedulingFlexibility {
+  STRICT // keep the learner's exact days and hours; never move sessions on their own
+  BALANCED
+  FLEXIBLE // free to shift within the learner's chosen days
 }

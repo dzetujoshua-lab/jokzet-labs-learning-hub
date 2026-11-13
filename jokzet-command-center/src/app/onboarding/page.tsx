@@ -8,6 +8,9 @@ import { getOnboardingState } from "@/lib/plan/onboarding";
 
 export const metadata: Metadata = { title: "Set up your programme" };
 
+// Per-request session lookup: blocking by design (see the layout). Declared here as well so a refresh of this page is covered.
+export const instant = false;
+
 /** Outside the (app) group on purpose: the app shell redirects here, so this page must not run that redirect itself. */
 export default async function OnboardingPage() {
   const user = await requireUser();

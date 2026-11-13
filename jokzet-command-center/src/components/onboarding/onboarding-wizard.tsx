@@ -7,6 +7,7 @@ import { completeOnboardingAction, saveOnboardingAction, skipBaselineAction, sta
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { sessionsPerDay } from "@/lib/plan/availability";
 import type { OnboardingState } from "@/lib/plan/onboarding";
 import { DURATIONS, MAX_GOALS, type DurationKind } from "@/lib/plan/schema";
 
@@ -34,6 +35,10 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
   const [experience, setExperience] = useState(d?.experience ?? "BEGINNER");
   const [goals, setGoals] = useState<Goal[]>(d?.goals ?? []);
   const [sessionMinutes, setSessionMinutes] = useState(String(d?.sessionMinutes ?? 45));
+  const [dailyStudyMinutes, setDailyStudyMinutes] = useState(String(d?.dailyStudyMinutes ?? 0));
+  const [breakMinutes, setBreakMinutes] = useState(String(d?.breakMinutes ?? 0));
+  const [flexibility, setFlexibility] = useState<"STRICT" | "BALANCED" | "FLEXIBLE">(d?.flexibility ?? "BALANCED");
+  const [autoReschedule, setAutoReschedule] = useState(d?.autoReschedule ?? true);
   const [weekdays, setWeekdays] = useState<number[]>(d?.weekdays ?? [1, 3, 5]);
   const [startTime, setStartTime] = useState(d?.startTime ?? "18:00");
   const [timezone, setTimezone] = useState(d?.timezone ?? (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC"));
@@ -43,6 +48,7 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
+  const perDay = sessionsPerDay(Number(dailyStudyMinutes) || 0, Number(sessionMinutes) || 45, Number(breakMinutes) || 0);
   const goalOf = (code: string) => goals.find((g) => g.departmentCode === code);
   const toggleGoal = (code: string) =>
     setGoals((gs) => (gs.some((g) => g.departmentCode === code) ? gs.filter((g) => g.departmentCode !== code) : gs.length >= MAX_GOALS ? gs : [...gs, { departmentCode: code, weight: 3, targetLevel: 1, note: "" }]));
@@ -62,7 +68,7 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
     run(
       () =>
         saveOnboardingAction({
-          experience, goals, sessionMinutes: Number(sessionMinutes), weekdays, startTime, timezone, durationKind,
+          experience, goals, sessionMinutes: Number(sessionMinutes), dailyStudyMinutes: Number(dailyStudyMinutes), breakMinutes: Number(breakMinutes), flexibility, autoReschedule, weekdays, startTime, timezone, durationKind,
           customDays: durationKind === "CUSTOM" ? Number(customDays) : undefined, startDate,
         }),
       () => {
@@ -143,6 +149,28 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
                 <Input className="mt-1" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
               </label>
             </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="text-xs text-muted-foreground">Study time per day (minutes, 0 = one session)
+                <Input type="number" inputMode="numeric" min={0} max={720} step={5} className="mt-1" value={dailyStudyMinutes} onChange={(e) => setDailyStudyMinutes(e.target.value)} />
+              </label>
+              <label className="text-xs text-muted-foreground">Break between sessions (minutes)
+                <Input type="number" inputMode="numeric" min={0} max={60} step={5} className="mt-1" value={breakMinutes} onChange={(e) => setBreakMinutes(e.target.value)} />
+              </label>
+              <label className="text-xs text-muted-foreground">Flexibility
+                <select className={`${SELECT} mt-1`} value={flexibility} onChange={(e) => setFlexibility(e.target.value as "STRICT" | "BALANCED" | "FLEXIBLE")}>
+                  <option value="STRICT">Strict: keep my exact times</option>
+                  <option value="BALANCED">Balanced</option>
+                  <option value="FLEXIBLE">Flexible: shift within my days</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              That is {perDay} session{perDay === 1 ? "" : "s"} on each study day.
+            </p>
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" className="mt-0.5" checked={autoReschedule} onChange={(e) => setAutoReschedule(e.target.checked)} />
+              <span>Let the Academy reschedule missed sessions for me. If this is off, missed sessions are only recorded.</span>
+            </label>
           </div>
         ) : null}
 
