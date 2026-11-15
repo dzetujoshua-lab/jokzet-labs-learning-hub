@@ -17,8 +17,8 @@ export type Level = (typeof LEVELS)[number];
 export const CONTENT_STATUSES = ["DRAFT", "IN_REVIEW", "APPROVED", "PUBLISHED", "RETIRED"] as const;
 export type ContentStatus = (typeof CONTENT_STATUSES)[number];
 
-/** Programme codes. The first seven are existing department codes; `gfx` (Graphic Design) is new; `sh` is the shared core. */
-export const PROGRAMME_CODES = ["fswd", "uxui", "sec", "photo", "video", "gfx", "ai", "biz"] as const;
+/** Programme codes. `fswd`, `uxui`, `sec`, `photo`, `video`, `ai`, `biz` and `cloud` are existing department codes (the `sysadmin` department is folded into `cloud`, pending an owner decision); `gfx` (Graphic Design) is new; `sh` is the shared core. */
+export const PROGRAMME_CODES = ["fswd", "uxui", "sec", "photo", "video", "gfx", "ai", "biz", "cloud"] as const;
 export type ProgrammeCode = (typeof PROGRAMME_CODES)[number];
 
 /** What a learner hands in. Matches the platform's evidence types (src/lib/programme.ts) plus kinds the engine will inspect. */
@@ -26,7 +26,7 @@ export const EVIDENCE_KINDS = ["SCREENSHOT", "PHOTO", "VIDEO", "CODE", "DOCUMENT
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 
 /** Rubric families, defined in rubrics.ts. A module names the family its missions are scored with. */
-export const RUBRIC_FAMILIES = ["WEB", "UXUI", "SECURITY", "PHOTO", "VIDEO", "GRAPHIC", "AI_AUTOMATION", "BUSINESS"] as const;
+export const RUBRIC_FAMILIES = ["WEB", "UXUI", "SECURITY", "PHOTO", "VIDEO", "GRAPHIC", "AI_AUTOMATION", "BUSINESS", "CLOUD_INFRA"] as const;
 export type RubricFamily = (typeof RUBRIC_FAMILIES)[number];
 
 export type ModuleSpec = {

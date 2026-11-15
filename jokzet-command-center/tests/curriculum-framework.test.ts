@@ -14,8 +14,8 @@ describe("the real curriculum framework", () => {
     expect(frameworkProblems()).toEqual([]);
   });
 
-  it("covers eight programmes, each with all five levels", () => {
-    expect(PROGRAMMES.map((p) => p.code).sort()).toEqual(["ai", "biz", "fswd", "gfx", "photo", "sec", "uxui", "video"]);
+  it("covers nine programmes, each with all five levels", () => {
+    expect(PROGRAMMES.map((p) => p.code).sort()).toEqual(["ai", "biz", "cloud", "fswd", "gfx", "photo", "sec", "uxui", "video"]);
     for (const p of PROGRAMMES) {
       for (const level of [0, 1, 2, 3, 4]) expect(p.modules.filter((m) => m.level === level).length, `${p.code} L${level}`).toBeGreaterThanOrEqual(3);
       expect(p.levelOutcomes).toHaveLength(5);
@@ -36,7 +36,7 @@ describe("the real curriculum framework", () => {
   });
 
   it("builds a valid recommended sequence for every pathway, prerequisites first", () => {
-    expect(PATHWAYS.map((p) => p.code)).toEqual(["full-stack-engineer", "cybersecurity-specialist", "ai-automation-engineer", "digital-product-designer", "digital-content-creator", "digital-entrepreneur"]);
+    expect(PATHWAYS.map((p) => p.code)).toEqual(["full-stack-engineer", "cybersecurity-specialist", "ai-automation-engineer", "digital-product-designer", "digital-content-creator", "digital-entrepreneur", "cloud-devops-engineer"]);
     for (const path of PATHWAYS) {
       const seq = pathwaySequence(path);
       const pos = new Map(seq.map((id, i) => [id, i]));
@@ -49,6 +49,25 @@ describe("the real curriculum framework", () => {
     for (const path of PATHWAYS) {
       const seq = pathwaySequence(path);
       expect(new Set(seq).size).toBe(seq.length);
+    }
+  });
+
+  it("lets a learner take Cloud and Server Administration on its own or combined with the four programmes it supports", () => {
+    const own = PATHWAYS.find((p) => p.code === "cloud-devops-engineer")!;
+    expect(own.requiredProgrammes).toEqual(["cloud", "fswd"]);
+    for (const code of ["full-stack-engineer", "cybersecurity-specialist", "ai-automation-engineer", "digital-entrepreneur"]) {
+      expect(PATHWAYS.find((p) => p.code === code)!.optionalProgrammes, code).toContain("cloud");
+    }
+    expect(PATHWAYS.find((p) => p.code === "digital-entrepreneur")!.electives!.from).toContain("cloud");
+    // Cloud needs only the shared core and FSWD SQL; it does not drag in unrelated programmes.
+    const cloudDeps = new Set(pathwaySequence({ ...own, requiredProgrammes: ["cloud"], requiredLevels: { cloud: 4 } }).map((id) => id.split("-")[0]));
+    expect([...cloudDeps].sort()).toEqual(["CLOUD", "FSWD", "SH"]);
+  });
+
+  it("covers every practical area in the brief", () => {
+    const text = ALL_MODULES.filter((m) => m.id.startsWith("CLOUD-")).map((m) => (m.title + " " + m.outcome).toLowerCase()).join(" ");
+    for (const topic of ["ubuntu", "windows server", "cpanel", "ssh", "dns", "apache", "nginx", "postgresql", "mysql", "tls", "vps", "docker", "ci/cd", "firewall", "backup", "monitoring", "kubernetes", "infrastructure as code", "disaster recovery", "high availability", "load balanc"]) {
+      expect(text, topic).toContain(topic);
     }
   });
 
@@ -77,6 +96,16 @@ describe("the validator catches bad curriculum", () => {
     ["a self prerequisite", { prerequisites: ["FSWD-L1-M09"] }, "require itself"],
   ])("rejects %s", (_name, patch, message) => {
     expect(moduleProblems({ ...good, ...patch } as ModuleSpec, comps).join("\n")).toContain(message);
+  });
+
+  it("keeps cloud work in labs the learner owns, at a bounded cost", () => {
+    const cloud: ModuleSpec = { ...good, id: "CLOUD-L2-M09", rubric: "CLOUD_INFRA", competencies: ["typescript"] };
+    const open = { ...cloud, outcome: "Configure a production server for the company you work for and open every port so that the team can deploy to it directly." };
+    expect(moduleProblems(open, comps).join("\n")).toContain("lab, virtual machine, free-tier or budget-capped");
+    const theirs = { ...cloud, outcome: "Log in to a client's live server over SSH in a lab and change its firewall rules so that the team can deploy to it directly." };
+    expect(moduleProblems(theirs, comps).join("\n")).toContain("do not own");
+    const fine = { ...cloud, outcome: "Configure the firewall and SSH on a server in your own virtual machine so that only key sign-in works, and show each rule." };
+    expect(moduleProblems(fine, comps).join("\n")).not.toMatch(/cloud outcome|do not own/);
   });
 
   it("protects the safety rules: photography needs the learner's own photos, security stays in authorised labs", () => {

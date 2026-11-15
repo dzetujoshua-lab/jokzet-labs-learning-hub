@@ -16,6 +16,10 @@ const OFFENSIVE = /\b(scan|exploit|penetration|attack|reconnaissance|vulnerabili
 /** Words that show the exercise is confined to an authorised environment. */
 const AUTHORISED = /\b(lab|authoris|authoriz|scope|own|intentionally vulnerable|simulated|provided|written permission|disclosure policy|learner-owned)\b/i;
 
+/** Words that show a cloud or server exercise runs on infrastructure the learner owns or is given, at a bounded cost. */
+const CLOUD_RISK = /\b(server|vps|instance|cluster|cloud account|cloud provider|firewall|ssh|virtual machine)\b/i;
+const CLOUD_BOUNDED = /\b(lab|virtual machine|your own|free[- ]tier|budget|cost cap|tear(s|ing)? (it )?down|local|provided|given|you control|you own)\b/i;
+
 export function moduleProblems(m: ModuleSpec, ownCompetencies: Record<string, string>): string[] {
   const p: string[] = [];
   const at = (msg: string) => p.push(`${m.id}: ${msg}`);
@@ -39,6 +43,8 @@ export function moduleProblems(m: ModuleSpec, ownCompetencies: Record<string, st
   if (m.id.startsWith("PHOTO-") && m.rubric === "PHOTO" && !m.evidence.includes("PHOTO")) at("a photography module scored on photographs must accept the learner's own PHOTO evidence");
   if (m.id.startsWith("VIDEO-") && m.level >= 1 && m.rubric === "VIDEO" && !m.evidence.some((e) => e === "VIDEO" || e === "AUDIO")) at("a video module must accept VIDEO or AUDIO evidence");
   if (m.id.startsWith("SEC-") && OFFENSIVE.test(m.outcome) && !AUTHORISED.test(m.outcome)) at("offensive-security outcome must state its authorised environment (lab, scope, own system)");
+  if (m.id.startsWith("CLOUD-") && CLOUD_RISK.test(m.outcome) && !CLOUD_BOUNDED.test(m.outcome)) at("cloud outcome must say it runs in a lab, virtual machine, free-tier or budget-capped account the learner owns or is given");
+  if (m.id.startsWith("CLOUD-") && /\b(client's|customer's|employer's|someone else's|third-party) (live |production )?(server|vps|site|account)/i.test(m.outcome) && !/\b(written permission|authoris)/i.test(m.outcome)) at("cloud module must not point learners at servers they do not own or are not authorised to administer");
   if (/\b(real|live|any|third-party|someone else's) (website|site|server|network|system|company)s?\b/i.test(m.outcome) && m.id.startsWith("SEC-") && !/\b(authoris|own|written permission|disclosure policy)\b/i.test(m.outcome)) {
     at("security module must not point learners at real third-party systems");
   }

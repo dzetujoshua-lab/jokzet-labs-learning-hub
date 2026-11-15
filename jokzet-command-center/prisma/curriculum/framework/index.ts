@@ -1,5 +1,6 @@
 import { AI } from "./ai";
 import { BIZ } from "./biz";
+import { CLOUD } from "./cloud";
 import { FSWD } from "./fswd";
 import { GFX } from "./gfx";
 import { PATHWAYS } from "./pathways";
@@ -14,7 +15,7 @@ import { VIDEO } from "./video";
 export * from "./types";
 export { PATHWAYS, RUBRICS, SHARED };
 
-export const PROGRAMMES: ProgrammeSpec[] = [FSWD, UXUI, SEC, PHOTO, VIDEO, GFX, AI, BIZ];
+export const PROGRAMMES: ProgrammeSpec[] = [FSWD, UXUI, SEC, PHOTO, VIDEO, GFX, AI, BIZ, CLOUD];
 
 export const ALL_MODULES: ModuleSpec[] = [...SHARED.modules, ...PROGRAMMES.flatMap((p) => p.modules)];
 
