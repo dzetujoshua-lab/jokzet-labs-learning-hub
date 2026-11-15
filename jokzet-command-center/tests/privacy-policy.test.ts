@@ -102,6 +102,14 @@ describe("the page never invents facts", () => {
     expect(text).not.toMatch(/verif(y|ied) (your )?age/i);
   });
 
+  it("describes the email route and the audit trail the code implements", () => {
+    expect(text).toContain("email the privacy address below from the email address on your account");
+    expect(text).toContain("we keep a record that it happened");
+    expect(text).toContain("one-way reference");
+    expect(readFileSync(path.join(root, "prisma/schema.prisma"), "utf8")).toContain("model PrivacyEvent");
+    expect(readFileSync(path.join(root, "scripts/privacy.ts"), "utf8")).toContain("OWNER_REQUEST");
+  });
+
   it("makes no claims the app does not support", () => {
     for (const claim of [/GDPR/, /CCPA/, /COPPA/, /encrypted at rest/i, /we (are|will be) (SOC|ISO)/i, /guarantee/i, /gmail\.(readonly|send|modify|compose)/i, /ads?-?free/i]) {
       expect(text, String(claim)).not.toMatch(claim);

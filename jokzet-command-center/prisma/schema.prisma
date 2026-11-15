@@ -1611,3 +1611,29 @@ enum SchedulingFlexibility {
   BALANCED
   FLEXIBLE // free to shift within the learner's chosen days
 }
+
+// ─────────────── Privacy audit trail ───────────────
+// A record that a data export or an account deletion happened. It deliberately holds no name, email or user id: subjectRef is a
+// one-way hash of the user id (so repeat exports by one person can be counted), and there is no foreign key, so the entry
+// survives the deletion of the account it describes.
+
+enum PrivacyEventKind {
+  EXPORT_DOWNLOADED
+  ACCOUNT_DELETED
+}
+
+enum PrivacyEventChannel {
+  SELF_SERVICE // the person did it in Settings
+  OWNER_REQUEST // the owner did it on request (an email), using scripts/privacy.ts
+}
+
+model PrivacyEvent {
+  id         String              @id @default(cuid())
+  kind       PrivacyEventKind
+  channel    PrivacyEventChannel
+  subjectRef String // first 16 hex characters of sha256(user id)
+  occurredAt DateTime            @default(now())
+
+  @@index([kind, occurredAt])
+  @@index([subjectRef])
+}
