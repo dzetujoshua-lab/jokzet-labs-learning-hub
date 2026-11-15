@@ -35,7 +35,8 @@ echo "commit: $(git -C "$BUILD_DIR" rev-parse --short HEAD)"
 cd "$BUILD_DIR/jokzet-command-center"
 [ -f package.json ] && [ -d prisma ] || { echo "Wrong folder: the Next.js app is jokzet-command-center/"; exit 1; }
 # A clean clone has no .env. Refuse to continue if one appears, so no local secret is ever bundled.
-if ls .env* >/dev/null 2>&1; then echo "Refusing to build: an .env file exists in the source folder."; exit 1; fi
+# (.env.example is a committed template with no values, so it is allowed; any other .env* file is refused.)
+if find . -maxdepth 1 -name '.env*' ! -name '.env.example' | grep -q .; then echo "Refusing to build: an .env file exists in the source folder."; exit 1; fi
 
 echo "== Install dependencies (npm ci, exact lockfile)"
 npm ci --no-audit --no-fund
