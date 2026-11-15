@@ -18,9 +18,16 @@ mkdir -p "$APP_ROOT"
 
 echo "Switching $APP_ROOT to $(basename "$RELEASE") (commit $(cut -c1-7 "$RELEASE/RELEASE_COMMIT" 2>/dev/null || echo unknown))"
 # Keep what cPanel and Passenger own (tmp, logs, .htaccess); replace everything else with the release.
-rsync -a --delete \
-  --exclude 'tmp' --exclude 'tmp/**' --exclude '.htaccess' --exclude 'stderr.log' --exclude 'public_html' \
-  "$RELEASE"/ "$APP_ROOT"/
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete \
+    --exclude 'tmp' --exclude 'tmp/**' --exclude '.htaccess' --exclude 'stderr.log' --exclude 'public_html' \
+    "$RELEASE"/ "$APP_ROOT"/
+else
+  # No rsync on this server: remove the old files (only direct children of APP_ROOT, never anything outside it, and a symlink such as
+  # node_modules is removed as a link, not followed), then copy the release in. A short gap while copying is expected; restart follows.
+  find "$APP_ROOT" -mindepth 1 -maxdepth 1 ! -name tmp ! -name .htaccess ! -name stderr.log ! -name public_html -exec rm -rf {} +
+  cp -a "$RELEASE"/. "$APP_ROOT"/
+fi
 
 mkdir -p "$APP_ROOT/tmp"
 touch "$APP_ROOT/tmp/restart.txt" # Passenger restarts the app when this file changes
