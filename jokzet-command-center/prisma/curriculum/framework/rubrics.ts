@@ -12,6 +12,7 @@ export const CAPABILITIES = [
   "IMAGE_VISION", // analyse screenshots and images with a vision-capable model
   "SANDBOX_EXECUTION", // run submitted code in an isolated environment and test it
   "MEDIA_ANALYSIS", // sample frames and audio from video and audio files (not built yet)
+  "INFRASTRUCTURE_PROBE", // read-only HTTP, TLS and port checks against a lab address the learner has registered as their own (not built yet)
   "HUMAN", // a reviewer must judge this criterion
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
@@ -115,6 +116,19 @@ export const RUBRICS: RubricFamilySpec[] = [
       c("Security", "No exposed keys, prompt-injection and data-leak defences are tested.", 20, "GITHUB_REPOSITORY", "SANDBOX_EXECUTION"),
       c("Error handling", "Failures are caught, logged and reported without corrupting results.", 10, "GITHUB_REPOSITORY", "SANDBOX_EXECUTION"),
       c("Documentation", "Someone else can run, test and operate it from the README.", 10, "GITHUB_REPOSITORY", "DOCUMENT_TEXT"),
+    ],
+  },
+  {
+    family: "CLOUD_INFRA",
+    name: "Cloud computing and server administration",
+    gate: "Authorised target: a probe or check may only be run against a lab address the learner registered as their own. Any evidence of work on a server the learner does not own or is not authorised to administer fails the submission and goes to a person.",
+    criteria: [
+      c("Deployment correctness", "The service is reachable and behaves as the brief says, including the failure and restart cases.", 25, "INFRASTRUCTURE_PROBE", "LIVE_SITE_BROWSER", "DOCUMENT_TEXT"),
+      c("Server security", "Firewall, SSH, accounts, updates, TLS and exposed services follow the stated hardening checklist.", 20, "INFRASTRUCTURE_PROBE", "DOCUMENT_TEXT", "GITHUB_REPOSITORY"),
+      c("Reliability", "Backups, restores, monitoring and recovery were demonstrated, not only configured.", 15, "DOCUMENT_TEXT", "INFRASTRUCTURE_PROBE", "HUMAN"),
+      c("Configuration", "Configuration is correct, minimal, repeatable and kept in version control where required.", 15, "GITHUB_REPOSITORY", "DOCUMENT_TEXT"),
+      c("Troubleshooting", "Faults are diagnosed from evidence (logs, metrics), the cause is stated and the fix is verified.", 15, "DOCUMENT_TEXT", "HUMAN"),
+      c("Documentation", "A runbook lets another administrator rebuild, operate and recover the system.", 10, "DOCUMENT_TEXT", "GITHUB_REPOSITORY"),
     ],
   },
   {

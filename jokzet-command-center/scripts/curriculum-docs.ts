@@ -45,6 +45,34 @@ programmeDoc(PROGRAMMES[4], "VIDEO_EDITING_CURRICULUM.md");
 programmeDoc(PROGRAMMES[5], "GRAPHIC_DESIGN_CURRICULUM.md");
 programmeDoc(PROGRAMMES[6], "AI_AUTOMATION_CURRICULUM.md");
 programmeDoc(PROGRAMMES[7], "BUSINESS_ENTREPRENEURSHIP_CURRICULUM.md");
+programmeDoc(PROGRAMMES[8], "CLOUD_SERVER_ADMINISTRATION_CURRICULUM.md");
+
+// Programme catalogue
+const DEPARTMENT: Record<string, string> = {
+  fswd: "fswd (existing)", uxui: "uxui (existing)", sec: "sec (existing)", photo: "photo (existing)", video: "video (existing)",
+  gfx: "gfx (NEW department needed)", ai: "ai (existing)", biz: "biz (existing, 'Business and Career Development')",
+  cloud: "cloud (existing); the existing 'sysadmin' department is folded into this programme, pending an owner decision",
+};
+write(
+  "PROGRAMME_CATALOGUE.md",
+  [
+    "# Programme catalogue",
+    "",
+    `Generated ${DATE}. Nine official programmes. Every module is DRAFT; no programme is open to learners through this curriculum yet.`,
+    "",
+    "| Programme | Code | Department in the database | Modules | Capstones | Module hours | Level 0 hours |",
+    "|---|---|---|---|---|---|---|",
+    ...PROGRAMMES.map(
+      (p) =>
+        `| ${p.name} | ${p.code} | ${DEPARTMENT[p.code]} | ${p.modules.length} | ${p.modules.filter((m) => m.capstone).length} | ${p.modules.reduce((x, m) => x + m.hours, 0)} | ${p.modules.filter((m) => m.level === 0).reduce((x, m) => x + m.hours, 0)} |`,
+    ),
+    `| Shared core | sh | n/a (referenced as prerequisites) | ${SHARED.modules.length} | 0 | ${SHARED.modules.reduce((x, m) => x + m.hours, 0)} | ${SHARED.modules.filter((m) => m.level === 0).reduce((x, m) => x + m.hours, 0)} |`,
+    "",
+    "Any programme can be taken on its own or combined with any other; learners are never required to take all nine. The Cloud and Server Administration programme additionally supports Full-Stack Web Development, Cybersecurity and Ethical Hacking, AI and Automation, and Business and Entrepreneurship (see LEARNING_PATHWAYS.md).",
+    "",
+    "Cloud and Server Administration is larger than the others because the brief lists many practical areas; it can be taken in stages (Levels 0 to 2 are a complete hosting skill set).",
+  ].join("\n"),
+);
 
 // Shared core
 write(
@@ -186,6 +214,7 @@ write(
     "- **Timetable compatibility:** modules carry hours, not missions, so generating a plan from this framework is untested. See the integration plan.",
     "- **Subject-matter accuracy:** the module outcomes were written from general professional knowledge and have not been reviewed by a practitioner in each field. Each programme needs a named subject reviewer before any module is APPROVED.",
     "- **Realism of hours:** planning estimates only; calibrate with a pilot.",
+    "- **Infrastructure labs:** no lab environment has been provisioned and no server, cloud, container or cPanel exercise has been run or verified. Every Cloud and Server Administration module is DRAFT and must stay so until its exercise has been executed end to end in a real lab by a reviewer. cPanel and WHM exercises are pending lab access (they need a licence or trial). Cloud exercises need cost caps confirmed against current provider free tiers, which have not been checked.",
   ].join("\n"),
 );
 

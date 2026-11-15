@@ -41,7 +41,7 @@ export const SEC: ProgrammeSpec = {
     // Level 0
     mod("SEC-L0-M01", 0, "Security fundamentals and personal hygiene", "Secure your own accounts and devices with a checklist, then explain to a non-technical person how phishing works and how to spot a sample set of ten messages.", 8, ["SH-L0-M01", "SH-L0-M02"], ["security-hygiene"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
     mod("SEC-L0-M02", 0, "Ethics, law and safe labs", "Build a personal lab with virtual machines on your own computer, sign a written scope for it, and explain what you may and may not test and why.", 8, ["SEC-L0-M01"], ["security-ethics"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
-    mod("SEC-L0-M03", 0, "How networks work", "Capture your own web traffic in the lab, label the DNS, TCP and HTTP steps of one page load, and explain what HTTPS protects.", 10, ["SEC-L0-M02"], ["networking"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
+    mod("SEC-L0-M03", 0, "How networks work", "Capture your own web traffic in the lab, label the DNS, TCP and HTTP steps of one page load, and explain what HTTPS protects.", 10, ["SEC-L0-M02", "SH-L0-M04"], ["networking"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
     // Level 1
     mod("SEC-L1-M01", 1, "Networking in depth", "Design and configure a small virtual network with subnets, and use packet analysis to show what each protocol does at each layer.", 20, ["SEC-L0-M03", "SH-L1-M07"], ["networking"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
     mod("SEC-L1-M02", 1, "Linux administration for security", "Harden a Linux virtual machine: users and groups, permissions, SSH keys, a firewall and unnecessary services removed, and record each step.", 20, ["SH-L1-M07"], ["linux-security"], ["DOCUMENT", "SCREENSHOT"], "SECURITY"),
