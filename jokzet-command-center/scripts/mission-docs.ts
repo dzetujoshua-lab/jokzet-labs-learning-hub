@@ -72,8 +72,10 @@ function doc(file: string, title: string, intro: string, drafts: MissionDraft[])
 
 const fswd = MISSION_DRAFTS.filter((m) => m.code.startsWith("FSWD-"));
 const biz = MISSION_DRAFTS.filter((m) => m.code.startsWith("BIZ-"));
-doc("FSWD_LEVEL0_MISSIONS.md", "Full-Stack Web Development: Level 0 missions", "Numbering continues after the legacy missions FSWD-L0-01 and FSWD-L0-02.", fswd);
-doc("BIZ_LEVEL0_MISSIONS.md", "Business and Entrepreneurship: Level 0 missions", "Numbering continues after the legacy missions BIZ-L0-01 and BIZ-L0-02. Money is in Ghana cedis and pesewas; the method works in any currency.", biz);
+const shared = MISSION_DRAFTS.filter((m) => m.code.startsWith("SH-"));
+doc("FSWD_MISSIONS.md", "Full-Stack Web Development: Level 0 and Level 1 missions", "Level 0 numbering continues after the legacy missions FSWD-L0-01 and FSWD-L0-02. Level 1 builds on the shared core missions (SHARED_CORE_MISSIONS.md).", fswd);
+doc("SHARED_CORE_MISSIONS.md", "Shared core missions", "Shared modules are prerequisites of several programmes and are written once under the SH prefix: computer and internet fundamentals, digital safety, HTML, CSS, JavaScript, accessibility and Git.", shared);
+doc("BIZ_MISSIONS.md", "Business and Entrepreneurship: Level 0 and Level 1 missions", "Level 0 numbering continues after the legacy missions BIZ-L0-01 and BIZ-L0-02. Money is in Ghana cedis and pesewas; the method works in any currency.", biz);
 
 // Legacy reconciliation
 const FIT: Record<string, [string, string]> = {
@@ -125,7 +127,7 @@ const s = missionStats(MISSION_DRAFTS);
 write(
   "MISSION_AUTHORING_REPORT.md",
   [
-    "# Mission authoring report (pilot: Level 0)",
+    "# Mission authoring report (pilot: Levels 0 and 1)",
     "",
     `Generated ${DATE}.`,
     "",
@@ -133,9 +135,9 @@ write(
     "",
     "## Written so far",
     "",
-    `- ${s.missions} mission drafts under ${s.modules} modules (Full-Stack Web Development L0-M01 to M03, Business and Entrepreneurship L0-M01 to M03).`,
+    `- ${s.missions} mission drafts under ${s.modules} modules: Full-Stack Web Development and Business and Entrepreneurship Levels 0 and 1, plus the 7 shared core modules they depend on (computer and internet, digital safety, HTML, CSS, JavaScript, accessibility, Git).`,
     `- ${s.minutes} learner minutes (${(s.minutes / 60).toFixed(1)} hours), of which ${s.watchMinutes} are WATCH (${Math.round((s.watchMinutes / s.minutes) * 100)}%), and ${s.xp} XP in total.`,
-    `- Modules in the framework with no missions yet: ${s.modulesWithoutMissions} (all other programmes, all levels above 0 for the pilot programmes, and shared modules, which take missions in the programme that first needs them).`,
+    `- Modules in the framework with no missions yet: ${s.modulesWithoutMissions} (all other programmes, Levels 2 to 4 of the pilot programmes, and the remaining shared modules: design principles, networks, Python, Linux, typography, composition, APIs and freelance business).`,
     "",
     "## Not done, stated plainly",
     "",

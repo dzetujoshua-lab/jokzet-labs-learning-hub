@@ -19,7 +19,7 @@ const URL = /\bhttps?:\/\/|\bwww\./i;
 const FAMILY_SHARE = [30, 50, 60, 60, 60];
 
 /** Mission-code prefix used by the existing platform for each programme. */
-export const MISSION_PREFIX: Record<string, string> = { fswd: "FSWD", uxui: "UXUI", sec: "SEC", cloud: "CLOUD", ai: "AI", photo: "PHOTO", video: "VID", gfx: "GFX", biz: "BIZ" };
+export const MISSION_PREFIX: Record<string, string> = { fswd: "FSWD", uxui: "UXUI", sec: "SEC", cloud: "CLOUD", ai: "AI", photo: "PHOTO", video: "VID", gfx: "GFX", biz: "BIZ", sh: "SH" };
 
 const blank = (v: unknown) => typeof v !== "string" || v.trim() === "";
 
@@ -49,8 +49,8 @@ export function missionDraftProblems(m: MissionDraft): string[] {
   if (code) {
     if (Number(code[2]) !== mod.level) at(`code says level ${code[2]} but module ${mod.id} is level ${mod.level}`);
     if (programme && code[1] !== MISSION_PREFIX[programme.code]) at(`code prefix must be ${MISSION_PREFIX[programme.code]} for the ${programme.name} programme`);
+    if (m.moduleId.startsWith("SH-") && code[1] !== MISSION_PREFIX.sh) at(`code prefix must be ${MISSION_PREFIX.sh} for a shared module`);
   }
-  if (mod.id.startsWith("SH-")) at("missions are written under a programme module; shared modules get missions in the programme that first needs them");
   if (m.status !== "DRAFT") at("status must be DRAFT until a reviewer approves it");
 
   if (blank(m.title) || m.title.length > 80) at("title is required and at most 80 characters");
