@@ -84,6 +84,7 @@ export const SHARED = [
 /** Deliberately not exported, with the reason. */
 export const EXCLUDED: Record<string, string> = {
   User: "Exported separately as `account`, without the password hash and sign-in counters.",
+  PrivacyEvent: "The audit trail of exports and deletions: no name, email or user id, only a one-way hash.",
   RateLimitBucket: "Hashed counters with no personal content; they expire within a day.",
 };
 

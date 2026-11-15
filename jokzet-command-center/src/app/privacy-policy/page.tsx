@@ -202,10 +202,11 @@ export default function PrivacyPolicyPage() {
               "You can delete evidence that is not attached to a submitted mission, and the uploaded file is removed from storage with it. Work you have submitted and its assessment are kept as part of your learning record.",
               "You can delete your account yourself in Settings (you confirm with your password). This permanently removes your account and the data linked to it, including uploaded files, and signs you out everywhere. It cannot be undone, so download a copy of your data first if you want one.",
               "If you review other learners&rsquo; work, the verdicts you gave stay with those learners but no longer carry your name. A role-change audit entry keeps its history without your email address.",
+              "When a data export or an account deletion happens, we keep a record that it happened: its type, its date and a one-way reference that cannot be turned back into your name or email. It is an audit trail so we can show requests were handled.",
               "After deletion, copies can remain for a short time in the database provider&rsquo;s backup history before they expire.",
             ]}
           />
-          <p>You can download a copy of your data and delete your account from Settings. If you cannot sign in, contact us and we will help.</p>
+          <p>You can download a copy of your data and delete your account from Settings. If you cannot sign in, email the privacy address below from the email address on your account and ask for a copy of your data or for deletion. We will check that the request really comes from you before acting, and we do not keep any other copy of what we send you.</p>
         </Section>
 
         <Section id="revoking-google-access" n={10} title="Revoking Google account access">
