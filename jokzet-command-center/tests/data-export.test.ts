@@ -79,11 +79,11 @@ describe("what is in the file", () => {
 });
 
 describe("the page and the policy agree with the feature", () => {
-  it("links the download from Settings and says so in the policy", () => {
-    const settings = readFileSync(path.resolve(import.meta.dirname, "../src/app/(app)/settings/page.tsx"), "utf8");
+  it("links the download from the Privacy page and says so in the policy", () => {
+    const settings = readFileSync(path.resolve(import.meta.dirname, "../src/app/(app)/privacy/page.tsx"), "utf8");
     expect(settings).toContain('href="/api/account/export"');
     const policy = readFileSync(path.resolve(import.meta.dirname, "../src/app/privacy-policy/page.tsx"), "utf8");
-    expect(policy).toContain("download a copy of your data from Settings");
+    expect(policy).toContain("download a copy of your data from the Privacy page");
   });
 });
 
