@@ -30,7 +30,20 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
 ];
 
+// Public address of the deployment (for example https://jokzet-labs.iipghstudent.com). Behind a reverse proxy the Host header the
+// server sees can differ from the address in the browser, so Server Actions are told which host to trust. Unset on Netlify.
+const publicHost = (() => {
+  try {
+    return process.env.APP_URL ? new URL(process.env.APP_URL).host : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+
 const nextConfig: NextConfig = {
+  // A self-contained server folder (.next/standalone) for hosts that run plain Node, such as cPanel. Off by default so the Netlify build is unchanged.
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
+  ...(publicHost ? { experimental: { serverActions: { allowedOrigins: [publicHost] } } } : {}),
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

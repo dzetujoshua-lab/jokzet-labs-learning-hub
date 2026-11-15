@@ -9,7 +9,20 @@ export const json = (body: unknown, status = 200) => NextResponse.json(body, { s
  */
 export function isSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
-  return origin !== null && origin === request.nextUrl.origin;
+  if (origin === null) return false;
+  if (origin === request.nextUrl.origin) return true;
+  // Behind a reverse proxy the server may see http and an internal host while the browser used the public https address.
+  // APP_URL is server configuration the operator sets, so trusting exactly that origin does not weaken the check.
+  const configured = configuredOrigin();
+  return configured !== null && origin === configured;
+}
+
+function configuredOrigin(): string | null {
+  try {
+    return process.env.APP_URL ? new URL(process.env.APP_URL).origin : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Constant-time check of `Authorization: Bearer <CRON_SECRET>`. Fails closed when no secret is configured. */

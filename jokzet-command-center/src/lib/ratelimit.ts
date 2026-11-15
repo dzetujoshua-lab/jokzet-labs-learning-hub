@@ -33,6 +33,15 @@ export function bucketKey(scope: string, ...parts: string[]): string {
 export function clientIp(headers: { get(name: string): string | null }): string {
   const platform = headers.get("x-nf-client-connection-ip")?.trim();
   if (platform) return platform.slice(0, 64);
+  // Self-hosting behind your own proxy: TRUSTED_PROXY_HOPS is how many proxies you control in front of the app. The client can
+  // add entries to the LEFT of X-Forwarded-For but cannot remove entries your proxies add on the RIGHT, so the entry that many
+  // places from the right is the address your first proxy actually saw. Unset (or 0) keeps the older fallbacks below.
+  const hops = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? "0", 10);
+  if (Number.isInteger(hops) && hops > 0) {
+    const chain = (headers.get("x-forwarded-for") ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+    const trusted = chain[chain.length - hops];
+    if (trusted) return trusted.slice(0, 64);
+  }
   const real = headers.get("x-real-ip")?.trim();
   if (real) return real.slice(0, 64);
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
