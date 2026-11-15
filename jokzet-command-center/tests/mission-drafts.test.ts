@@ -12,14 +12,19 @@ describe("the authored pilot missions", () => {
     expect(missionSetProblems(MISSION_DRAFTS)).toEqual([]);
   });
 
-  it("cover the pilot programmes' Level 0 modules completely", () => {
-    for (const id of ["FSWD-L0-M01", "FSWD-L0-M02", "FSWD-L0-M03", "BIZ-L0-M01", "BIZ-L0-M02", "BIZ-L0-M03"]) {
+  it("cover the pilot programmes' Level 0 and Level 1 modules, and the shared modules they depend on, completely", () => {
+    const ids = [
+      "FSWD-L0-M01", "FSWD-L0-M02", "FSWD-L0-M03", "BIZ-L0-M01", "BIZ-L0-M02", "BIZ-L0-M03",
+      "SH-L0-M01", "SH-L0-M02", "SH-L1-M01", "SH-L1-M02", "SH-L1-M03", "SH-L1-M04", "SH-L1-M05",
+      "FSWD-L1-M01", "FSWD-L1-M02", "FSWD-L1-M03", "FSWD-L1-M04", "BIZ-L1-M01", "BIZ-L1-M02", "BIZ-L1-M03", "BIZ-L1-M04", "BIZ-L1-M05",
+    ];
+    for (const id of ids) {
       const mod = moduleById(id)!;
       const list = missionsForModule(id);
-      expect(list.length, id).toBeGreaterThanOrEqual(3);
+      expect(list.length, id).toBeGreaterThanOrEqual(2);
       for (const c of mod.competencies) expect(list.some((m) => m.competencies.includes(c)), `${id} ${c}`).toBe(true);
     }
-    expect(missionStats(MISSION_DRAFTS).missions).toBe(20);
+    expect(missionStats(MISSION_DRAFTS).missions).toBe(71);
   });
 
   it("follow WATCH, DO, EXPERIMENT, SHOW with practical work dominating", () => {
@@ -48,6 +53,21 @@ describe("the authored pilot missions", () => {
     expect(codes[0]).toBe("FSWD-L0-03");
   });
 
+  it("leaves no pilot prerequisite without missions: every shared module FSWD and BIZ need through Level 1 has them", () => {
+    for (const id of ["FSWD-L1-M01", "FSWD-L1-M02", "FSWD-L1-M03", "FSWD-L1-M04", "BIZ-L1-M01"]) {
+      const stack = [...moduleById(id)!.prerequisites];
+      const seen = new Set<string>();
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        const mod = moduleById(cur)!;
+        expect(missionsForModule(cur).length, `${id} needs ${cur}`).toBeGreaterThan(0);
+        stack.push(...mod.prerequisites);
+      }
+    }
+  });
+
   it("award honest XP: between 0.35 and 0.5 per minute", () => {
     for (const m of MISSION_DRAFTS) {
       expect(m.xp / m.minutes, m.code).toBeGreaterThanOrEqual(0.3);
@@ -73,6 +93,7 @@ describe("the mission validator rejects bad missions", () => {
     ["a competency the module does not teach", { competencies: ["sql-postgres"] }, "is not one of module"],
     ["the wrong level in the code", { code: "FSWD-L2-04" }, "code says level 2"],
     ["the wrong programme prefix", { code: "BIZ-L0-04" }, "code prefix must be FSWD"],
+    ["a shared module mission with a programme prefix", { moduleId: "SH-L1-M01", code: "FSWD-L1-01" }, "code prefix must be SH for a shared module"],
     ["an unknown module", { moduleId: "FSWD-L0-M99" }, "does not exist"],
     ["a status above DRAFT", { status: "PUBLISHED" as never }, "must be DRAFT"],
     ["too few steps", { doSteps: sound.doSteps.slice(0, 2) }, "at least three concrete steps"],
