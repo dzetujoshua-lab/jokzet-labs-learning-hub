@@ -17,15 +17,15 @@ node -v
 echo "platform: $(node -p 'process.platform + "-" + process.arch')"
 ldd --version 2>&1 | head -1 || true
 
+# No GitHub API call here: shared hosting addresses quickly use up GitHub's anonymous API limit (HTTP 403). Plain download links are not limited.
 if [ -z "$TAG" ]; then
-  echo "== Find newest release"
-  TAG="$(curl -fsS "https://api.github.com/repos/$REPO/releases?per_page=30" | grep -o '"tag_name": *"cpanel-[^"]*"' | head -1 | sed 's/.*"\(cpanel-[^"]*\)"/\1/')"
-  [ -n "$TAG" ] || { echo "No cpanel-* release found yet. Run the GitHub workflow 'Build cPanel release' first."; exit 1; }
+  echo "release: newest (releases/latest)"
+  BASE="https://github.com/$REPO/releases/latest/download"
+else
+  echo "release: $TAG"
+  BASE="https://github.com/$REPO/releases/download/$TAG"
 fi
-echo "release: $TAG"
 
-DEST="$RELEASES_DIR/$TAG"
-BASE="https://github.com/$REPO/releases/download/$TAG"
 TMP="$(mktemp -d "$HOME/.fetch-release.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -34,10 +34,14 @@ curl -fL --retry 3 -o "$TMP/jokzet-release.tar.gz" "$BASE/jokzet-release.tar.gz"
 curl -fL --retry 3 -o "$TMP/jokzet-release.tar.gz.sha256" "$BASE/jokzet-release.tar.gz.sha256"
 (cd "$TMP" && sha256sum -c jokzet-release.tar.gz.sha256)
 
-echo "== Unpack to $DEST"
+echo "== Unpack"
+mkdir -p "$TMP/unpacked" "$RELEASES_DIR"
+tar -xzf "$TMP/jokzet-release.tar.gz" -C "$TMP/unpacked"
+COMMIT="$(cut -c1-7 "$TMP/unpacked/RELEASE_COMMIT")"
+DEST="$RELEASES_DIR/${TAG:-cpanel-$(date -u +%Y%m%d-%H%M%S)-$COMMIT}"
 [ ! -e "$DEST" ] || { echo "$DEST already exists; remove it or choose another tag."; exit 1; }
-mkdir -p "$DEST"
-tar -xzf "$TMP/jokzet-release.tar.gz" -C "$DEST"
+mv "$TMP/unpacked" "$DEST"
+echo "unpacked to $DEST"
 
 echo "== Verify"
 test -f "$DEST/server.js" || { echo "server.js is missing"; exit 1; }
