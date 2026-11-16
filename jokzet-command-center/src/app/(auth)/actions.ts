@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { authenticate, registerUser } from "@/lib/auth/service";
 import { endSession, startSession } from "@/lib/auth/dal";
 import { loginSchema, registerFormSchema } from "@/lib/auth/validation";
+import { personalisedLearningEnabled } from "@/lib/plan/flag";
 import { LIMITS, bucketKey, clientIp, rateLimitHit } from "@/lib/ratelimit";
 
 export type FormState = {
@@ -57,7 +58,8 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
     return { error: "We could not create that account. Try a different email or sign in.", email: parsed.data.email, displayName: parsed.data.displayName };
   }
   await startSession(result.userId, meta);
-  redirect("/");
+  // A new personalised account always starts in onboarding; the app shell would send it there anyway (server-side).
+  redirect(personalisedLearningEnabled() ? "/onboarding" : "/");
 }
 
 export async function login(_prev: FormState, formData: FormData): Promise<FormState> {

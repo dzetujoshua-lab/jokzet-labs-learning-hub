@@ -15,7 +15,7 @@ import { LocalDiskStorage, setStorageForTests } from "@/lib/storage";
 // The route reads the session from cookies; stand in for it with a fixed user.
 type SessionUser = { id: string; email: string; displayName: string; role: "LEARNER" | "ADMIN" | "AUTHOR" | "REVIEWER" };
 const session = vi.hoisted(() => ({ user: null as SessionUser | null }));
-vi.mock("@/lib/auth/dal", () => ({ getCurrentUser: async () => session.user, requireUser: async () => session.user }));
+vi.mock("@/lib/auth/dal", () => ({ getCurrentUser: async () => session.user, getOnboardedUser: async () => session.user, requireOnboardedUser: async () => session.user, requireUser: async () => session.user }));
 
 import { GET as ownerFile } from "@/app/api/evidence/[id]/file/route";
 import { GET as reviewerFile } from "@/app/api/review/[requestId]/evidence/[evidenceId]/file/route";

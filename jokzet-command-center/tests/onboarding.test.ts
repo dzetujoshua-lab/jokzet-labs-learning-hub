@@ -31,7 +31,7 @@ const input = (over: Partial<OnboardingInput> = {}): OnboardingInput => ({
 async function account(name: string, mode: "on" | "off") {
   const before = process.env.PERSONALISED_LEARNING;
   if (mode === "on") process.env.PERSONALISED_LEARNING = "on";
-  else delete process.env.PERSONALISED_LEARNING;
+  else process.env.PERSONALISED_LEARNING = "off";
   try {
     const r = await registerUser({ displayName: name, email: mail(name.toLowerCase()), password: PASSWORD });
     if (!r.ok) throw new Error("registration failed");
@@ -123,14 +123,18 @@ describe("placement and validation (pure)", () => {
 });
 
 describe("learner mode and the rollout flag", () => {
-  it("is OFF unless explicitly on", () => {
+  it("is ON by default and off only with an explicit opt-out", () => {
+    const before = process.env.PERSONALISED_LEARNING;
     delete process.env.PERSONALISED_LEARNING;
-    expect(personalisedLearningEnabled()).toBe(false);
-    process.env.PERSONALISED_LEARNING = "true";
-    expect(personalisedLearningEnabled()).toBe(false);
+    expect(personalisedLearningEnabled()).toBe(true);
     process.env.PERSONALISED_LEARNING = "on";
     expect(personalisedLearningEnabled()).toBe(true);
-    delete process.env.PERSONALISED_LEARNING;
+    for (const v of ["off", "OFF", "false", "0"]) {
+      process.env.PERSONALISED_LEARNING = v;
+      expect(personalisedLearningEnabled(), v).toBe(false);
+    }
+    if (before === undefined) delete process.env.PERSONALISED_LEARNING;
+    else process.env.PERSONALISED_LEARNING = before;
   });
 
   it("with the flag off a new account is the original programme: LEGACY, COMPLETE, Level 0 scheduled", async () => {
@@ -141,7 +145,7 @@ describe("learner mode and the rollout flag", () => {
   });
 
   it("with the flag on a new account is PERSONALISED and not given the fixed schedule", async () => {
-    expect(await db.profile.findUniqueOrThrow({ where: { userId: learner } })).toMatchObject({ learnerMode: "PERSONALISED", onboardingStatus: "NOT_STARTED" });
+    expect(await db.profile.findUniqueOrThrow({ where: { userId: learner } })).toMatchObject({ learnerMode: "PERSONALISED", onboardingStatus: "IN_PROGRESS" });
     expect(await db.learnerMission.count({ where: { userId: learner } })).toBe(0);
     await ensureLearnerSetup(learner); // must not quietly schedule it
     expect(await db.learnerMission.count({ where: { userId: learner } })).toBe(0);
@@ -271,6 +275,7 @@ describe("baseline: placement only, never earned", () => {
   it("can be skipped, and a baseline for a dropped subject disappears with the subject", async () => {
     expect((await skipBaseline(other, "photo")).ok).toBe(true); // photo has no baseline: nothing to record
     expect(await db.baselineAssessment.count({ where: { userId: other } })).toBe(0);
+    await db.profile.update({ where: { userId: other }, data: { onboardingStatus: "IN_PROGRESS" } }); // answers can only change while onboarding is open
     await saveOnboarding(other, input({ goals: [{ departmentCode: "fswd", weight: 2, targetLevel: 1, note: "" }] }));
     expect((await skipBaseline(other, "fswd")).ok).toBe(true);
     expect((await getOnboardingState(other))!.baselines.map((b) => b.status)).toEqual(["SKIPPED"]);

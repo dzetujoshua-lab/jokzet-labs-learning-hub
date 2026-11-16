@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth/dal";
+import { requireOnboardedUser as requireUser } from "@/lib/auth/dal";
 import { finishOnboarding } from "@/lib/plan/finish";
 import { pausePlan, resumePlan } from "@/lib/plan/service";
 import { timetableAccess } from "@/lib/plan/timetable-service";

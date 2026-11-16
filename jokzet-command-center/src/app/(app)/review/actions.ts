@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireRole, requireUser } from "@/lib/auth/dal";
+import { requireOnboardedUser as requireUser, requireRole } from "@/lib/auth/dal";
 import { cancelReviewRequest, claimRequest, completeReview, releaseRequest, requestReview, type Actor, type CompleteInput, type CompleteResult } from "@/lib/reviews/service";
 
 const idSchema = z.string().min(1).max(64);

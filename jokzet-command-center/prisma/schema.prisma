@@ -1365,6 +1365,8 @@ enum LearnerMode {
 enum OnboardingStatus {
   NOT_STARTED
   IN_PROGRESS
+  PLAN_GENERATING
+  PLAN_REVIEW
   COMPLETE
 }
 

@@ -3,22 +3,26 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { finishOnboardingAction, saveOnboardingAction, skipBaselineAction, startBaselineAction } from "@/app/onboarding/actions";
+import { buildPlanAction, confirmPlanAction, editAnswersAction, saveOnboardingAction, skipBaselineAction, startBaselineAction } from "@/app/onboarding/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { sessionsPerDay } from "@/lib/plan/availability";
 import type { OnboardingState } from "@/lib/plan/onboarding";
-import { DURATIONS, MAX_GOALS, type DurationKind } from "@/lib/plan/schema";
+import type { PlanReview } from "@/lib/plan/review";
+import { DURATION_DAYS, DURATIONS, MAX_GOALS, type DurationKind } from "@/lib/plan/schema";
+
+type Programme = { code: string; name: string; description: string; outcomes: string[]; lessons: number };
 
 type Goal = { departmentCode: string; weight: number; targetLevel: number; note: string };
 
-const STEPS = ["About you", "Subjects", "Your time", "Duration", "Baseline"] as const;
+const STEPS = ["Experience", "Programmes", "Availability", "Duration", "Baseline", "Review"] as const;
+const REVIEW_STEP = 5;
 const EXPERIENCE = [
-  { value: "BEGINNER", label: "Beginner", hint: "New to this. Start from the basics." },
-  { value: "IMPROVER", label: "Improver", hint: "Know a little. Fill the gaps." },
+  { value: "BEGINNER", label: "Complete beginner", hint: "Never done this before. Start from the very basics." },
+  { value: "IMPROVER", label: "Beginner", hint: "Know a little. Fill the gaps." },
   { value: "INTERMEDIATE", label: "Intermediate", hint: "Comfortable. Build real projects." },
-  { value: "ADVANCED", label: "Advanced", hint: "Experienced. Go deeper." },
+  { value: "ADVANCED", label: "Advanced", hint: "Experienced. Go deeper. Advanced material is only unlocked by showing evidence." },
 ] as const;
 const DURATION_LABEL: Record<DurationKind, string> = {
   TWO_WEEKS: "2 weeks", ONE_MONTH: "1 month", THREE_MONTHS: "3 months", SIX_MONTHS: "6 months", ONE_YEAR: "1 year", CUSTOM: "Custom",
@@ -28,10 +32,10 @@ const SELECT = "flex h-9 w-full rounded-md border border-input bg-transparent px
 
 const chip = (on: boolean) => `rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${on ? "border-primary/60 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`;
 
-export function OnboardingWizard({ departments, state, today }: { departments: { code: string; name: string }[]; state: OnboardingState; today: string }) {
+export function OnboardingWizard({ departments, state, today, review }: { departments: Programme[]; state: OnboardingState; today: string; review: PlanReview | null }) {
   const router = useRouter();
   const d = state.draft;
-  const [step, setStep] = useState(d ? 4 : 0);
+  const [step, setStep] = useState(state.status === "PLAN_REVIEW" && review ? REVIEW_STEP : d ? 4 : 0);
   const [experience, setExperience] = useState(d?.experience ?? "BEGINNER");
   const [goals, setGoals] = useState<Goal[]>(d?.goals ?? []);
   const [sessionMinutes, setSessionMinutes] = useState(String(d?.sessionMinutes ?? 45));
@@ -49,6 +53,11 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
   const [pending, startTransition] = useTransition();
 
   const perDay = sessionsPerDay(Number(dailyStudyMinutes) || 0, Number(sessionMinutes) || 45, Number(breakMinutes) || 0);
+  const days = durationKind === "CUSTOM" ? Number(customDays) || 0 : DURATION_DAYS[durationKind];
+  const hoursPerWeek = Math.round((weekdays.length * perDay * (Number(sessionMinutes) || 0)) / 6) / 10;
+  const totalHours = Math.round((hoursPerWeek * days) / 7);
+  const availabilityError = weekdays.length === 0 ? "Choose at least one study day." : Number(sessionMinutes) < 15 || Number(sessionMinutes) > 240 ? "A session must be between 15 and 240 minutes." : !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? "Choose a start time." : "";
+  const durationError = durationKind === "CUSTOM" && (days < 7 || days > 365) ? "Choose between 7 and 365 days." : "";
   const goalOf = (code: string) => goals.find((g) => g.departmentCode === code);
   const toggleGoal = (code: string) =>
     setGoals((gs) => (gs.some((g) => g.departmentCode === code) ? gs.filter((g) => g.departmentCode !== code) : gs.length >= MAX_GOALS ? gs : [...gs, { departmentCode: code, weight: 3, targetLevel: 1, note: "" }]));
@@ -103,12 +112,19 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
 
         {step === 1 ? (
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Choose up to {MAX_GOALS} subjects. A higher weight gets more of your time.</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-xs text-muted-foreground">Choose one programme, or up to {MAX_GOALS} to learn together. A higher weight gets more of your time.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
               {departments.map((x) => (
-                <button key={x.code} type="button" aria-pressed={!!goalOf(x.code)} onClick={() => toggleGoal(x.code)} className={chip(!!goalOf(x.code))}>{x.name}</button>
+                <button key={x.code} type="button" aria-pressed={!!goalOf(x.code)} onClick={() => toggleGoal(x.code)}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${goalOf(x.code) ? "border-primary/60 bg-primary/10" : "border-border hover:border-primary/40"}`}>
+                  <span className="block text-sm text-foreground">{x.name}</span>
+                  {x.description ? <span className="mt-0.5 block text-xs text-muted-foreground">{x.description}</span> : null}
+                  {x.outcomes.length ? <span className="mt-1.5 block text-[11px] leading-relaxed text-muted-foreground">You will: {x.outcomes.join(" · ")}</span> : null}
+                  <span className="mt-1.5 block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{x.lessons} published lessons{goalOf(x.code) ? " · selected" : ""}</span>
+                </button>
               ))}
             </div>
+            {goals.length >= MAX_GOALS ? <p className="text-xs text-muted-foreground">You have chosen the most programmes you can study together ({MAX_GOALS}).</p> : null}
             {goals.map((g) => (
               <div key={g.departmentCode} className="rounded-xl border border-border p-4">
                 <p className="text-sm text-foreground">{nameOf(g.departmentCode)}</p>
@@ -165,8 +181,9 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
               </label>
             </div>
             <p className="text-xs text-muted-foreground">
-              That is {perDay} session{perDay === 1 ? "" : "s"} on each study day.
+              That is {perDay} session{perDay === 1 ? "" : "s"} on each study day, about {hoursPerWeek} hours a week. Times follow your time zone ({timezone}).
             </p>
+            {availabilityError ? <p role="alert" className="text-xs text-destructive">{availabilityError}</p> : null}
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <input type="checkbox" className="mt-0.5" checked={autoReschedule} onChange={(e) => setAutoReschedule(e.target.checked)} />
               <span>Let the Academy reschedule missed sessions for me. If this is off, missed sessions are only recorded.</span>
@@ -186,9 +203,21 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
                 </label>
               ) : null}
               <label className="text-xs text-muted-foreground">Start date
-                <Input type="date" className="mt-1" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <Input type="date" className="mt-1" min={today} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </label>
             </div>
+            <div className="rounded-xl border border-border p-4 text-xs leading-relaxed text-muted-foreground">
+              <p className="text-foreground">{days} days · about {hoursPerWeek} hours a week · about {totalHours} hours in total</p>
+              <p className="mt-1">
+                {days <= 62
+                  ? "A shorter plan covers fewer missions. It puts required foundations and assessments first and tells you what does not fit, rather than dropping it silently."
+                  : days >= 180
+                    ? "A longer plan goes deeper and leaves room for review and catch-up sessions, but it asks for steady attendance over many months."
+                    : "A balanced length: core missions, assessments, review and catch-up time."}
+              </p>
+              <p className="mt-1">A plan gives you structure and the right order of work. Skills come from practising and being assessed; the length of a plan never promises expert competency.</p>
+            </div>
+            {durationError ? <p role="alert" className="text-xs text-destructive">{durationError}</p> : null}
           </div>
         ) : null}
 
@@ -224,18 +253,64 @@ export function OnboardingWizard({ departments, state, today }: { departments: {
           </div>
         ) : null}
 
+        {step === REVIEW_STEP ? (
+          review ? (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground">Your plan is ready to review. Nothing starts until you confirm.</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-border p-3"><p className="mono-label">Runs</p><p className="mt-1 text-sm text-foreground">{review.startDate} to {review.endDate}</p></div>
+                <div className="rounded-xl border border-border p-3"><p className="mono-label">Sessions</p><p className="mt-1 text-sm text-foreground">{review.totalSessions} over {review.weeks} weeks</p></div>
+                <div className="rounded-xl border border-border p-3"><p className="mono-label">Study time</p><p className="mt-1 text-sm text-foreground">about {Math.round(review.totalMinutes / 60)} hours</p></div>
+              </div>
+              <div>
+                <p className="mono-label">Programmes</p>
+                <ul className="mt-2 space-y-1 text-sm text-foreground">
+                  {(review.summary?.coverage ?? []).map((c) => (
+                    <li key={c.departmentCode}>{nameOf(c.departmentCode)}: {c.missionsPlanned} of {c.missionsAvailable} missions planned</li>
+                  ))}
+                </ul>
+              </div>
+              {review.summary?.shortfall?.length ? (
+                <p role="status" className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
+                  Not everything fits in this time: {review.summary.shortfall.map((x) => `${nameOf(x.departmentCode)} (${x.sessions} sessions short)`).join(", ")}. Go back to choose a longer duration, more study time or fewer programmes.
+                </p>
+              ) : null}
+              {review.summary?.warnings?.map((w) => <p key={w} role="status" className="text-xs text-muted-foreground">{w}</p>)}
+              <div>
+                <p className="mono-label">Stages</p>
+                <ol className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {review.phases.map((p) => <li key={p.title + p.startDate}><span className="text-foreground">{p.title}</span> · {p.startDate} to {p.endDate}</li>)}
+                </ol>
+              </div>
+              <div>
+                <p className="mono-label">Your first week ({review.timezone})</p>
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {review.firstWeek.map((i, n) => <li key={i.date + i.time + n}>{i.date} {i.time} · {i.minutes} min · <span className="text-foreground">{i.title}</span></li>)}
+                </ul>
+              </div>
+              <p className="text-xs text-muted-foreground">You can reschedule any session later, and missed sessions are rescheduled for you if you chose that.</p>
+            </div>
+          ) : (
+            <p role="status" className="text-sm text-muted-foreground">Building your plan…</p>
+          )
+        ) : null}
+
         {error ? <p role="alert" className="mt-4 text-xs text-destructive">{error}</p> : null}
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button variant="secondary" disabled={pending || step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</Button>
+        <Button variant="secondary" disabled={pending || step === 0} onClick={() => (step === REVIEW_STEP ? run(() => editAnswersAction(), () => { setStep(4); router.refresh(); }) : setStep((s) => Math.max(0, s - 1)))}>Back</Button>
         {step < 3 ? (
-          <Button disabled={pending || (step === 1 && goals.length === 0) || (step === 2 && weekdays.length === 0)} onClick={() => { setError(""); setStep((s) => s + 1); }}>Next</Button>
+          <Button disabled={pending || (step === 1 && goals.length === 0) || (step === 2 && !!availabilityError)} onClick={() => { setError(""); setStep((s) => s + 1); }}>Next</Button>
         ) : step === 3 ? (
-          <Button disabled={pending} onClick={save}>{pending ? "Saving…" : "Save and continue"}</Button>
+          <Button disabled={pending || !!durationError} onClick={save}>{pending ? "Saving…" : "Save and continue"}</Button>
+        ) : step === 4 ? (
+          <Button disabled={pending} onClick={() => run(() => buildPlanAction(), () => { setStep(REVIEW_STEP); router.refresh(); })}>
+            {pending ? "Building your plan…" : "Build my plan"}
+          </Button>
         ) : (
-          <Button disabled={pending} onClick={() => run(() => finishOnboardingAction(), () => { toast.success("Setup saved"); router.push("/"); router.refresh(); })}>
-            {pending ? "Finishing…" : "Finish setup"}
+          <Button disabled={pending || !review} onClick={() => run(() => confirmPlanAction(), () => { toast.success("Your plan is confirmed"); router.push("/"); router.refresh(); })}>
+            {pending ? "Starting…" : "Confirm and start"}
           </Button>
         )}
       </div>

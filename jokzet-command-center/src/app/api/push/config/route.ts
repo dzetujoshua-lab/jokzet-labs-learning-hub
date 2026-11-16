@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getOnboardedUser as getCurrentUser } from "@/lib/auth/dal";
 import { json } from "@/lib/http";
 import { getPushConfig } from "@/lib/notifications/push";
 

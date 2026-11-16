@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireUser } from "@/lib/auth/dal";
+import { requireOnboardedUser as requireUser } from "@/lib/auth/dal";
 import { setCorrectionResolved, assessSubmission, type AssessResult } from "@/lib/assessments/service";
 import { deleteEvidence } from "@/lib/evidence/service";
 import { attachToDraft, detachFromDraft } from "@/lib/missions/submissions";
