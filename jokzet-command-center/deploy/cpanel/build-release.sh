@@ -38,17 +38,35 @@ cd "$BUILD_DIR/jokzet-command-center"
 # (.env.example is a committed template with no values, so it is allowed; any other .env* file is refused.)
 if find . -maxdepth 1 -name '.env*' ! -name '.env.example' | grep -q .; then echo "Refusing to build: an .env file exists in the source folder."; exit 1; fi
 
+# CloudLinux's activated environment replaces npm with a wrapper that adds --prefix <the virtual environment's lib folder> to every
+# command. npm then treats THAT folder as the project, finds no package.json or lockfile there, and fails with a misleading
+# "npm ci can only install with an existing package-lock.json" (the real cause is in npm's debug log, "no package.json at prefix").
+# So run npm's real program directly with node, from this project's own folder.
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+ALT_ROOT="${ALT_NODE_ROOT:-/opt/alt/alt-nodejs$NODE_MAJOR/root/usr}"
+NPM_CLI=""
+for candidate in "$ALT_ROOT/lib/node_modules/npm/bin/npm-cli.js" "$(dirname "$(readlink -f "$(command -v node)")")/../lib/node_modules/npm/bin/npm-cli.js"; do
+  if [ -f "$candidate" ]; then NPM_CLI="$candidate"; break; fi
+done
+if [ -n "$NPM_CLI" ]; then
+  echo "npm program: $NPM_CLI (run directly, bypassing the environment wrapper)"
+  npm_run() { node "$NPM_CLI" "$@"; }
+else
+  echo "npm program: the 'npm' on PATH (real npm not found; if install fails, this wrapper may be adding --prefix)"
+  npm_run() { npm "$@"; }
+fi
+
 echo "== Install dependencies (npm ci, exact lockfile)"
 # The server's own npm settings can break a clean install (for example package-lock=false in ~/.npmrc, or NODE_ENV=production, which
 # makes npm skip the build tools). Show them, then override both explicitly for this one command.
 echo "package-lock.json in source: $([ -f package-lock.json ] && echo present || echo MISSING)"
-echo "npm 'package-lock' setting: $(npm config get package-lock)"
+echo "npm 'package-lock' setting: $(npm_run config get package-lock)"
 echo "NODE_ENV in this shell: ${NODE_ENV:-unset}"
 [ -f package-lock.json ] || { echo "package-lock.json is missing from the downloaded source."; exit 1; }
-env -u NODE_ENV npm ci --include=dev --package-lock=true --no-audit --no-fund
+( unset NODE_ENV; npm_run ci --include=dev --package-lock=true --no-audit --no-fund --prefix "$PWD" )
 
 echo "== Build (standalone output)"
-NODE_OPTIONS="--max-old-space-size=$MEM_MB" NEXT_OUTPUT=standalone APP_URL="$APP_URL" npx next build
+NODE_OPTIONS="--max-old-space-size=$MEM_MB" NEXT_OUTPUT=standalone APP_URL="$APP_URL" node ./node_modules/next/dist/bin/next build
 
 echo "== Assemble release: $RELEASE"
 mkdir -p "$RELEASE"
