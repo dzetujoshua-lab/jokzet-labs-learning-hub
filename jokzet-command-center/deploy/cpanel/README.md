@@ -2,8 +2,19 @@
 
 Target: `https://jokzet-labs.iipghstudent.com`, existing Neon database, Netlify kept as the rollback until cPanel is verified.
 
-What is **verified** (on a Windows build machine, 2026-11-15): the app builds in standalone mode and the generated `server.js` starts, answers `/api/health` against the database, serves pages and static files and sends the security headers.
-What is **not yet verified**: anything on the real server (Node 24 there, Passenger startup, memory limits, outbound access to Neon, LiteSpeed headers). Those are checked in the steps below.
+Status (verified 2026-11-16): the app runs on this server from a release built on GitHub, health check `{"status":"ok","database":"up"}`, pages and static files served over valid HTTPS, private pages redirect to sign-in.
+
+## How a release reaches the server
+
+The server's C library (glibc 2.28) is too old for Next.js 16's native build tools (`GLIBC_2.29 not found`), so **the app is built on GitHub and only run here**:
+
+1. GitHub: *Actions, Build cPanel release, Run workflow* (or `gh workflow run cpanel-release.yml`). It builds on Ubuntu, refuses to publish if any native file needs a newer glibc than the server's, and publishes a release with no secrets in it.
+2. Server: `bash ~/fetch-release.sh` downloads the newest release, checks its checksum and proves the native password library loads on this server.
+3. Server: `APP_ROOT=$HOME/jokzet-command-center bash ~/switch-release.sh "<release folder>"` makes it live and restarts it.
+
+`build-release.sh` (building on the server) only works on a server with glibc 2.29 or newer; it is kept for that case.
+
+Also learned the hard way: the activated CloudLinux environment's `npm` wrapper adds `--prefix <nodevenv lib>` to every command, which makes `npm ci` fail with a misleading "no package-lock.json" error. `build-release.sh` bypasses the wrapper. GitHub's API returns 403 to shared-hosting addresses, so `fetch-release.sh` uses plain download links.
 
 ## Why the layout matters (the error you hit)
 
@@ -24,14 +35,14 @@ $HOME/
 1. **Clear the failed registration (cPanel UI only).** In *Setup Node.js App*, find the failed `jokzet-labs-learning-hub` entry. Use its **Destroy** action. Do not delete `nodevenv` folders yourself. If Destroy is refused, send the exact message to your host.
 2. **Create the new application.** *Create Application*: Node.js version 24.22.3 if listed (otherwise the newest 22 or 24 offered; Next.js 16 needs 20.9 or newer); Mode Production; **Application root `jokzet-command-center`** (a new folder); **Application URL** `jokzet-labs.iipghstudent.com`; **Startup file `server.js`** (a file name, not a folder). Name it `jokzet-command-center`. Do not press "Run NPM Install" (the release contains its own `node_modules`).
 3. **Environment variables.** In the same page add the variables from `env.production.example`. Paste `DATABASE_URL` only into that page.
-4. **Build on the server.** In cPanel Terminal, activate the app's environment (cPanel shows the exact `source .../activate` line at the top of the page), then:
+4. **Fetch the release.** In the Terminal (Node environment active, prompt shows `(jokzet-command-center (24))`):
    ```bash
-   mkdir -p ~/jokzet-data/evidence
-   cd ~ && git clone --depth 1 https://github.com/dzetujoshua-lab/jokzet-labs-learning-hub.git tmp-fetch && cp tmp-fetch/jokzet-command-center/deploy/cpanel/*.sh ~/ && rm -rf tmp-fetch
-   APP_URL=https://jokzet-labs.iipghstudent.com bash ~/build-release.sh
+   mkdir -p ~/jokzet-data/evidence ~/releases ~/build
+   cd ~/build && git clone --depth 1 https://github.com/dzetujoshua-lab/jokzet-labs-learning-hub.git jokzet-src   # first time only
+   cd ~/build/jokzet-src && git fetch --depth 1 origin master && git reset --hard origin/master && cp jokzet-command-center/deploy/cpanel/*.sh ~/
+   bash ~/fetch-release.sh
    ```
-   If the build is killed, the account is out of memory: retry with `MEM_MB=3072`, or ask the host to raise the limit.
-5. **Go live.** `APP_ROOT=$HOME/jokzet-command-center bash ~/switch-release.sh "$HOME/releases/<the folder it printed>"`.
+5. **Go live.** `APP_ROOT=$HOME/jokzet-command-center bash ~/switch-release.sh "$(ls -d ~/releases/cpanel-* | tail -1)"`.
 6. **Check.** `curl -s https://jokzet-labs.iipghstudent.com/api/health` should return 200. Then open the site, register a **test** account, sign in and out. Check the *Setup Node.js App* log if anything fails.
 7. **Rate limiting.** Behind LiteSpeed the app needs to know how many proxies you control. On the server run a request with a made-up header and see what the app receives, for example send `X-Forwarded-For: 9.9.9.9` to a test route and compare. Then set `TRUSTED_PROXY_HOPS` (normally `1`). Until it is set, a client can pretend to be many addresses and avoid sign-in throttling. Treat this as required before opening sign-up.
 8. **Reminders.** `CRON_SECRET='…' APP_URL=… bash ~/install-cron.sh`, then add the printed line in cPanel *Cron Jobs*.
