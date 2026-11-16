@@ -24,6 +24,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 40
+    env:
+      # prisma generate (run by npm's postinstall) and the build read this variable. They never connect to a database: this is a
+      # placeholder, not a credential. The real address is set only in the cPanel Node.js App page.
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
     defaults:
       run:
         working-directory: jokzet-command-center
@@ -48,8 +52,6 @@ jobs:
         env:
           NEXT_OUTPUT: standalone
           APP_URL: ${{ inputs.app_url }}
-          # The build never connects to a database. This placeholder only lets modules load; no real credentials are used or needed.
-          DATABASE_URL: postgresql://build:build@localhost:5432/build
         run: npx next build
 
       - name: Assemble release
