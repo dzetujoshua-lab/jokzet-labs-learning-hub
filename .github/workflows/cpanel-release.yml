@@ -1,0 +1,103 @@
+name: Build cPanel release
+
+# Builds the Next.js app (jokzet-command-center/) on Ubuntu with modern system libraries and publishes the finished, self-contained
+# release as a GitHub Release asset that the cPanel server downloads. Why: the cPanel server's C library (glibc) is too old for
+# Next.js 16's native compiler, so the app cannot be BUILT there, but it can RUN there.
+#
+# Manual only. It contains no secrets: runtime settings (database address, secrets) live in the cPanel Node.js App page.
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: Public address of the deployment (https)
+        required: true
+        default: https://jokzet-labs.iipghstudent.com
+      max_glibc:
+        description: Highest glibc version the server may need (the build fails if any native file needs more)
+        required: true
+        default: "2.28"
+
+permissions:
+  contents: write # create the release and upload its files
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: jokzet-command-center
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: jokzet-command-center/package-lock.json
+
+      - name: Check inputs
+        run: |
+          case "${{ inputs.app_url }}" in https://*) ;; *) echo "app_url must start with https://"; exit 1;; esac
+          echo "node $(node -v), npm $(npm -v), $(uname -m), glibc $(ldd --version | head -1)"
+
+      - name: Install dependencies (exact lockfile)
+        run: npm ci --no-audit --no-fund
+
+      - name: Build (standalone output)
+        env:
+          NEXT_OUTPUT: standalone
+          APP_URL: ${{ inputs.app_url }}
+          # The build never connects to a database. This placeholder only lets modules load; no real credentials are used or needed.
+          DATABASE_URL: postgresql://build:build@localhost:5432/build
+        run: npx next build
+
+      - name: Assemble release
+        run: |
+          set -euo pipefail
+          R="$RUNNER_TEMP/release"
+          rm -rf "$R"; mkdir -p "$R"
+          cp -a .next/standalone/. "$R/"
+          cp -a public "$R/public"
+          mkdir -p "$R/.next"
+          cp -a .next/static "$R/.next/static"
+          rm -rf "$R"/.env "$R"/.env.* "$R/storage"
+          echo "$GITHUB_SHA" > "$R/RELEASE_COMMIT"
+          test -f "$R/server.js"
+          test -d "$R/.next/static"
+          ls "$R/node_modules/@node-rs" | grep -q linux
+          if ls "$R"/.env* >/dev/null 2>&1; then echo "an .env file is in the release"; exit 1; fi
+          echo "R=$R" >> "$GITHUB_ENV"
+
+      - name: Check native files against the server's glibc
+        run: |
+          set -euo pipefail
+          MAX="${{ inputs.max_glibc }}"
+          echo "Native files in the release:"
+          find "$R" \( -name '*.node' -o -name '*.so' -o -name '*.so.*' \) -type f | sed "s#$R/##" | head -40
+          NEED="$(find "$R" \( -name '*.node' -o -name '*.so' -o -name '*.so.*' \) -type f -print0 | xargs -0 -r objdump -T 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -V -u | tail -1)"
+          echo "Highest glibc needed by any native file: ${NEED:-none}; server allows up to $MAX"
+          if [ -n "$NEED" ] && [ "$(printf '%s\n%s\n' "$NEED" "$MAX" | sort -V | tail -1)" != "$MAX" ]; then
+            echo "A native file needs glibc $NEED, newer than the server's $MAX. Not publishing."
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          tar -C "$R" -czf "$RUNNER_TEMP/out/jokzet-release.tar.gz" .
+          (cd "$RUNNER_TEMP/out" && sha256sum jokzet-release.tar.gz > jokzet-release.tar.gz.sha256)
+          ls -l "$RUNNER_TEMP/out"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="cpanel-$(date -u +%Y%m%d)-${GITHUB_SHA::7}-run${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" "$RUNNER_TEMP/out/jokzet-release.tar.gz" "$RUNNER_TEMP/out/jokzet-release.tar.gz.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "cPanel release $TAG" \
+            --notes "Self-contained Next.js release for cPanel, built from $GITHUB_SHA for ${{ inputs.app_url }}. Contains no secrets. Download with deploy/cpanel/fetch-release.sh."
+          echo "Published release tag: $TAG"
