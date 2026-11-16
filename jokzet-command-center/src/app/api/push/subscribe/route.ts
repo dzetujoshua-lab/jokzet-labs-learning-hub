@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getOnboardedUser as getCurrentUser } from "@/lib/auth/dal";
 import { isSameOrigin, json } from "@/lib/http";
 import { getPushConfig, removeSubscription, saveSubscription } from "@/lib/notifications/push";
 import { setChannelFlag } from "@/lib/schedule/settings";

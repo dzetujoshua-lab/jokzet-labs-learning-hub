@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getOnboardedUser as getCurrentUser } from "@/lib/auth/dal";
 import { streamEvidenceFile } from "@/lib/evidence/stream";
 import { json } from "@/lib/http";
 import { authoriseEvidenceAccess, isReviewerRole, logEvidenceAccess } from "@/lib/reviews/service";

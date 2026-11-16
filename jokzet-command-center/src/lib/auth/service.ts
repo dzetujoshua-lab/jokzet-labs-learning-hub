@@ -12,8 +12,8 @@ export type AuthResult = { ok: true; userId: string } | { ok: false; error: "EMA
 
 /**
  * Creates the user, profile and a progress record for every department in one transaction. While the personalised-learning
- * flag is off (the default) every new account gets the original programme (LEGACY, onboarding COMPLETE, Level 0 scheduled).
- * With the flag on, a new account is PERSONALISED, starts onboarding and is not given the fixed schedule.
+ * flag is on (the default) a new account is PERSONALISED, starts onboarding (IN_PROGRESS) and is not given the fixed schedule.
+ * Only with the emergency opt-out (PERSONALISED_LEARNING=off) does a new account get the original programme (LEGACY, Level 0 scheduled).
  */
 export async function registerUser(input: RegisterInput, options: { adultConfirmed?: boolean } = {}): Promise<AuthResult> {
   const passwordHash = await hashPassword(input.password);
@@ -27,7 +27,7 @@ export async function registerUser(input: RegisterInput, options: { adultConfirm
           passwordHash,
           profile: {
             create: personalised
-              ? { displayName: input.displayName, learnerMode: "PERSONALISED", onboardingStatus: "NOT_STARTED", adultConfirmedAt }
+              ? { displayName: input.displayName, learnerMode: "PERSONALISED", onboardingStatus: "IN_PROGRESS", adultConfirmedAt }
               : { displayName: input.displayName, learnerMode: "LEGACY", onboardingStatus: "COMPLETE", adultConfirmedAt },
           },
         },

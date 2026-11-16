@@ -1,8 +1,10 @@
 /**
- * Rollout switch for personalised learning. OFF unless the PERSONALISED_LEARNING environment variable is exactly "on".
- * While it is off nobody is sent to onboarding, new sign-ups get the original programme, and the onboarding page
- * redirects home. Turning it on is a separate, explicit decision (it is not part of any deployment by itself).
+ * Personalised learning is the default experience: every new account goes through onboarding (profile, programmes, goals,
+ * experience, duration, availability) and gets a generated, reviewed plan. It is switched OFF only by setting the
+ * PERSONALISED_LEARNING environment variable to "off" (an emergency opt-out that restores the original fixed programme for
+ * NEW sign-ups). Existing learners are never moved between modes by this switch.
  */
 export function personalisedLearningEnabled(): boolean {
-  return process.env.PERSONALISED_LEARNING === "on";
+  const v = (process.env.PERSONALISED_LEARNING ?? "").trim().toLowerCase();
+  return !(v === "off" || v === "false" || v === "0");
 }

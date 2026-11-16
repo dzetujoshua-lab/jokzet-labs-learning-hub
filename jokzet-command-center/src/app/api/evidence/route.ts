@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getOnboardedUser as getCurrentUser } from "@/lib/auth/dal";
 import { MAX_BYTES } from "@/lib/evidence/files";
 import { createEvidence } from "@/lib/evidence/service";
 import { isSameOrigin, json } from "@/lib/http";

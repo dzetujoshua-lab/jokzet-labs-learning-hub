@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getOnboardedUser as getCurrentUser } from "@/lib/auth/dal";
 import { json } from "@/lib/http";
 import { pendingForClient, tickUser } from "@/lib/notifications/engine";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";

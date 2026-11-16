@@ -8,7 +8,7 @@ import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 const session = vi.hoisted(() => ({ user: { id: "route-test-user", email: "x@example.test", displayName: "R", role: "LEARNER" as const } as { id: string; email: string; displayName: string; role: "LEARNER" } | null }));
 const engine = vi.hoisted(() => ({ tickUser: vi.fn(async () => 0), pendingForClient: vi.fn(async () => [] as unknown[]) }));
 
-vi.mock("@/lib/auth/dal", () => ({ getCurrentUser: async () => session.user, requireUser: async () => session.user }));
+vi.mock("@/lib/auth/dal", () => ({ getCurrentUser: async () => session.user, getOnboardedUser: async () => session.user, requireOnboardedUser: async () => session.user, requireUser: async () => session.user }));
 vi.mock("@/lib/notifications/engine", () => engine);
 
 import { GET as pendingGet } from "@/app/api/notifications/pending/route";

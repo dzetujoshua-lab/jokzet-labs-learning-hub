@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { startMission } from "@/lib/missions/progress";
 import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import { placementFromPercentage } from "./baseline";
-import { ensureReminderSettings } from "./service";
+import { activatePlan, ensureReminderSettings, generateDraft } from "./service";
 import { durationDaysFor, onboardingSchema, type OnboardingInput } from "./schema";
 
 /**
@@ -27,7 +27,7 @@ export type BaselineView = {
 
 export type OnboardingState = {
   learnerMode: "LEGACY" | "PERSONALISED";
-  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
+  status: "NOT_STARTED" | "IN_PROGRESS" | "PLAN_GENERATING" | "PLAN_REVIEW" | "COMPLETE";
   draft: {
     experience: "BEGINNER" | "IMPROVER" | "INTERMEDIATE" | "ADVANCED";
     sessionMinutes: number;
@@ -110,6 +110,7 @@ export async function saveOnboarding(userId: string, input: OnboardingInput): Pr
 
   const mode = await requirePersonalised(userId);
   if (!mode.ok) return mode;
+  if (mode.status === "COMPLETE") return fail("Your programme is already set up. Change it from your timetable settings.");
 
   const limit = await rateLimitHit(bucketKey("onboarding:save", userId), LIMITS.onboardingSave);
   if (!limit.ok) return fail("Please slow down and try again in a little while.");
@@ -117,6 +118,10 @@ export async function saveOnboarding(userId: string, input: OnboardingInput): Pr
   const departments = await db.department.findMany({ where: { code: { in: d.goals.map((g) => g.departmentCode) } }, select: { id: true, code: true } });
   const idByCode = new Map(departments.map((x) => [x.code, x.id]));
   if (d.goals.some((g) => !idByCode.has(g.departmentCode))) return fail("One of the chosen subjects does not exist.");
+  // Only programmes with published curriculum can be chosen: a plan is built from real missions, never from a placeholder.
+  const published = await db.mission.groupBy({ by: ["departmentId"], where: { createdById: null, isPublished: true, role: "LESSON", departmentId: { in: [...idByCode.values()] } } });
+  const withContent = new Set(published.map((p) => p.departmentId));
+  if ([...idByCode.values()].some((id) => !withContent.has(id))) return fail("One of the chosen programmes has no published lessons yet. Choose another.");
 
   const days = durationDaysFor(d.durationKind, d.customDays);
   const start = new Date(`${d.startDate}T00:00:00.000Z`);
@@ -150,7 +155,9 @@ export async function saveOnboarding(userId: string, input: OnboardingInput): Pr
     });
     // Baselines for subjects that were dropped (and never attempted) go away with them.
     await tx.baselineAssessment.deleteMany({ where: { planId: plan.id, status: { in: ["PENDING", "SKIPPED"] }, departmentId: { notIn: [...idByCode.values()] } } });
-    await tx.profile.updateMany({ where: { userId, onboardingStatus: "NOT_STARTED" }, data: { onboardingStatus: "IN_PROGRESS" } });
+    // Any change to the answers sends the learner back to "in progress": a plan generated from the old answers is no longer
+    // what they are reviewing, and a half-finished generation is abandoned.
+    await tx.profile.updateMany({ where: { userId, onboardingStatus: { in: ["NOT_STARTED", "PLAN_GENERATING", "PLAN_REVIEW"] } }, data: { onboardingStatus: "IN_PROGRESS" } });
   });
   return { ok: true };
 }
@@ -224,6 +231,60 @@ export async function completeOnboarding(userId: string): Promise<Result> {
     await tx.profile.update({ where: { userId }, data: { onboardingStatus: "COMPLETE" } });
   });
   return { ok: true };
+}
+
+/**
+ * Builds the plan from the saved answers and parks it for review (PLAN_REVIEW). Nothing is activated: no reminders, no
+ * progress, no ACTIVE plan. Repeating it with the same answers returns the same stored plan (the generator is idempotent),
+ * and a failure puts the learner back to IN_PROGRESS with the reason, leaving no half-built state behind.
+ */
+export async function buildPlanForReview(userId: string): Promise<Result<{ planId: string }>> {
+  const mode = await requirePersonalised(userId);
+  if (!mode.ok) return mode;
+  if (mode.status === "COMPLETE") return fail("Your plan is already set up.");
+  const draft = await db.learningPlan.findFirst({ where: { userId, status: "DRAFT" }, select: { id: true, _count: { select: { goals: true } } } });
+  if (!draft || draft._count.goals === 0) return fail("Save your programme choices before building your plan.");
+
+  await db.profile.update({ where: { userId }, data: { onboardingStatus: "PLAN_GENERATING" } });
+  let built: Awaited<ReturnType<typeof generateDraft>>;
+  try {
+    built = await generateDraft(userId);
+  } catch {
+    built = fail("We could not build your plan just now. Please try again.");
+  }
+  await db.profile.update({ where: { userId }, data: { onboardingStatus: built.ok ? "PLAN_REVIEW" : "IN_PROGRESS" } });
+  return built.ok ? { ok: true, planId: built.planId } : built;
+}
+
+/**
+ * The learner's explicit confirmation of the plan they reviewed: the only way onboarding completes. The plan is rebuilt
+ * from the current answers first; if it differs from what was shown (something changed meanwhile) nothing is activated and
+ * the learner reviews the updated plan. Idempotent: a repeat or a double click never creates a second active plan.
+ */
+export async function confirmPlan(userId: string): Promise<Result<{ planId: string }>> {
+  const mode = await requirePersonalised(userId);
+  if (!mode.ok) return mode;
+  const markComplete = async (planId: string, timezone: string): Promise<Result<{ planId: string }>> => {
+    await db.$transaction(async (tx) => {
+      await ensureReminderSettings(tx, userId, timezone);
+      await tx.profile.update({ where: { userId }, data: { onboardingStatus: "COMPLETE" } });
+    });
+    return { ok: true, planId };
+  };
+  const live = await db.learningPlan.findFirst({ where: { userId, status: { in: ["ACTIVE", "PAUSED"] } }, select: { id: true, timezone: true } });
+  if (live) return markComplete(live.id, live.timezone); // already confirmed (repeat or double click)
+  if (mode.status !== "PLAN_REVIEW") return fail("Review your plan before confirming it.");
+
+  const current = await generateDraft(userId);
+  if (!current.ok) return current;
+  if (!current.unchanged) return fail("Your plan changed while you were reviewing. Please review the updated plan and confirm again.");
+  const started = await activatePlan(userId);
+  if (!started.ok) {
+    const raced = await db.learningPlan.findFirst({ where: { userId, status: "ACTIVE" }, select: { id: true, timezone: true } });
+    return raced ? markComplete(raced.id, raced.timezone) : started;
+  }
+  const done = await db.learningPlan.findUniqueOrThrow({ where: { id: started.planId }, select: { timezone: true } });
+  return markComplete(started.planId, done.timezone);
 }
 
 /** Where a PERSONALISED learner who has not finished onboarding must go (null for everyone else). */

@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
 import { SESSION_COOKIE, sessionCookieOptions } from "./cookie";
 import { createSessionRecord, deleteSessionByToken, resolveSession, type Role, type SessionUser } from "./sessions";
 
@@ -15,6 +16,29 @@ export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
+}
+
+/** True for a PERSONALISED learner who has not confirmed their plan yet. Read from the database on every call. */
+async function onboardingIncomplete(userId: string): Promise<boolean> {
+  const p = await db.profile.findUnique({ where: { userId }, select: { learnerMode: true, onboardingStatus: true } });
+  return !!p && p.learnerMode === "PERSONALISED" && p.onboardingStatus !== "COMPLETE";
+}
+
+/**
+ * requireUser for server actions: also refuses a learner who has not finished onboarding (sent back to the wizard). The page
+ * gate alone is not enough because a server action can be invoked without rendering a page.
+ */
+export async function requireOnboardedUser(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (await onboardingIncomplete(user.id)) redirect("/onboarding");
+  return user;
+}
+
+/** getCurrentUser for route handlers: null (so the usual 401) while the learner has not finished onboarding. */
+export async function getOnboardedUser(): Promise<SessionUser | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  return (await onboardingIncomplete(user.id)) ? null : user;
 }
 
 /** Roles that may review other learners' work (administrators review every department; reviewers only their own scope). */

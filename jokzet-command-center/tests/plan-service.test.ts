@@ -23,7 +23,7 @@ const answers = (over: Partial<OnboardingInput> = {}): OnboardingInput => ({
 async function account(name: string, flag = true) {
   const before = process.env.PERSONALISED_LEARNING;
   if (flag) process.env.PERSONALISED_LEARNING = "on";
-  else delete process.env.PERSONALISED_LEARNING;
+  else process.env.PERSONALISED_LEARNING = "off";
   try {
     const r = await registerUser({ displayName: name, email: mail(name.toLowerCase()), password: PASSWORD });
     if (!r.ok) throw new Error("registration failed");
