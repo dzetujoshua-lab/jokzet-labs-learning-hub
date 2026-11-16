@@ -39,7 +39,13 @@ cd "$BUILD_DIR/jokzet-command-center"
 if find . -maxdepth 1 -name '.env*' ! -name '.env.example' | grep -q .; then echo "Refusing to build: an .env file exists in the source folder."; exit 1; fi
 
 echo "== Install dependencies (npm ci, exact lockfile)"
-npm ci --no-audit --no-fund
+# The server's own npm settings can break a clean install (for example package-lock=false in ~/.npmrc, or NODE_ENV=production, which
+# makes npm skip the build tools). Show them, then override both explicitly for this one command.
+echo "package-lock.json in source: $([ -f package-lock.json ] && echo present || echo MISSING)"
+echo "npm 'package-lock' setting: $(npm config get package-lock)"
+echo "NODE_ENV in this shell: ${NODE_ENV:-unset}"
+[ -f package-lock.json ] || { echo "package-lock.json is missing from the downloaded source."; exit 1; }
+env -u NODE_ENV npm ci --include=dev --package-lock=true --no-audit --no-fund
 
 echo "== Build (standalone output)"
 NODE_OPTIONS="--max-old-space-size=$MEM_MB" NEXT_OUTPUT=standalone APP_URL="$APP_URL" npx next build
