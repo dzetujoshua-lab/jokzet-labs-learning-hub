@@ -223,3 +223,13 @@ Effort for the P0 and P1 security items is itemised in `docs/REMAINING_DEVELOPME
 
 ## 9. Information not verified
 Neon console settings (roles, IP allow-list, backup window); cPanel account security (SSH, 2FA, file permissions); LiteSpeed header rewriting; real headers on authenticated pages; whether evidence from the earlier Netlify storage still exists; email deliverability (no email exists); Node 24 runtime behaviour of the full test suite (tests ran on the audit machine's Node 26).
+
+## 10. Remediation log (added after the original report; findings above are unchanged)
+| Date | Finding | Change | State |
+|---|---|---|---|
+| 2026-11-18 | SEC-01 | The exposed Neon owner password was reset on all four branches. The app now connects as a limited `jokzet_app` role (read and write data only; create, alter and drop refused). Verified against the live database and the live app's connections. | FIXED (owner password rotated; old one refused). Credential exposure in transcripts is not reversible, so treat earlier copies as dead. |
+| 2026-11-18 | SEC-05, SEC-04 (beta) | Checkbox and self-made tasks earn no XP; self-assessed and AI results are formative; only a reviewer confirmation grants XP (PR 34). | FIXED in code and live |
+| 2026-11-18 | SEC-13 | Settings and Privacy reachable during onboarding (PR 34). | FIXED in code and live |
+| 2026-11-18 | SEC-20 | Reminders cron installed; heartbeat confirmed five consecutive minutes. | FIXED |
+| 2026-11-18 | SEC-10 | Production holds no uploaded evidence files (0 rows). A daily on-account copy was scheduled; an off-account copy is not yet arranged. | PARTIAL |
+| 2026-11-18 | SEC-06, SEC-07 | Content-Security-Policy enforced in production, `Strict-Transport-Security` (180 days, no subdomains, no preload) sent, `Cross-Origin-Opener-Policy` added, `frame-ancestors 'none'` now enforced (this closes the framing gap even where an edge layer overrides `X-Frame-Options`). `'unsafe-inline'` scripts remain until a nonce-based policy is built. | FIXED in code; live after the next release is switched in. Verify with `curl -I`. |

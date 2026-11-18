@@ -10,7 +10,7 @@ import { LEVEL0 } from "../prisma/curriculum/level0";
 import { syncResourceCatalogue } from "../prisma/curriculum/resource-sync";
 import { resourceProblems } from "../prisma/curriculum/resource-validate";
 import type { MissionResourceSpec, ResourceSpec } from "../prisma/curriculum/resources";
-import nextConfig, { contentSecurityPolicy } from "../next.config";
+import { contentSecurityPolicy, securityHeaders } from "../next.config";
 import { waitForWindowRoom } from "./helpers/window";
 
 const PASSWORD = "correct-horse-42battery";
@@ -272,8 +272,8 @@ describe("the seed with an empty catalogue", () => {
 });
 
 describe("page security headers", () => {
-  it("send a report-only CSP that allows only our own origin plus the privacy-enhanced video frame", async () => {
-    const policy = Object.fromEntries(contentSecurityPolicy.split("; ").map((d) => [d.split(" ")[0], d.split(" ").slice(1)]));
+  it("send a CSP that allows only our own origin plus the privacy-enhanced video frame", async () => {
+    const policy = Object.fromEntries(contentSecurityPolicy(true).split("; ").map((d) => [d.split(" ")[0], d.split(" ").slice(1)]));
     expect(policy["frame-src"]).toEqual(["'self'", "https://www.youtube-nocookie.com"]);
     expect(policy["default-src"]).toEqual(["'self'"]);
     expect(policy["object-src"]).toEqual(["'none'"]);
@@ -285,10 +285,9 @@ describe("page security headers", () => {
     }
     expect(policy["script-src"].join(" ")).not.toMatch(/youtube|https:/); // no third-party scripts (no player API)
 
-    const headers = await nextConfig.headers!();
-    const all = headers.flatMap((h) => h.headers).map((h) => h.key);
-    expect(all).toContain("Content-Security-Policy-Report-Only");
-    expect(all).not.toContain("Content-Security-Policy"); // report-only for now: nothing is blocked
+    const all = securityHeaders(true).map((h) => h.key);
+    expect(all).toContain("Content-Security-Policy"); // enforced in production
+    expect(all).not.toContain("Content-Security-Policy-Report-Only");
     expect(all).toContain("X-Frame-Options");
   });
 });
