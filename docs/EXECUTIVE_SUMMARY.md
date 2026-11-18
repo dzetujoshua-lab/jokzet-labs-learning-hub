@@ -13,10 +13,10 @@ Audit date: 2026-11-18. Platform: JOKZET Labs Academy, live on cPanel at https:/
 5. **Operations.** No reminders cron, no scheduled backups of uploaded files, no monitoring, deployments typed by hand, six production accounts without a profile.
 
 ## What remains
-Six launch-blocking phases (credential rotation, learner home, pilot curriculum, credit integrity, account recovery, operations) and six reliability phases (browser tests, security headers and CI, performance, accessibility, reviewer tooling, landing page). AI-assisted assessment and evidence inspection follow after the first release.
+Six launch-blocking areas (credential rotation, learner home, pilot curriculum, credit integrity, account recovery, operations) and six reliability areas (browser tests, security headers and CI, performance, accessibility, reviewer tooling, landing page), broken into ten stages in `REMAINING_DEVELOPMENT_PHASES.md`. AI-assisted assessment and evidence inspection follow after the first release.
 
 ## Time
-Supervised beta with the two pilot programmes: about 24 engineering days plus 15 to 25 days of expert content review in parallel, roughly 5 to 8 weeks elapsed. General launch: about 8 to 11 weeks. The full vision of nine programmes across five levels with AI inspection: 6 to 9 months, mostly content. These are estimates, not commitments.
+Supervised beta with the two pilot programmes: about 47 engineering days (revised up from the earlier 24 once browser tests, the curriculum publishing pipeline, email recovery, backups and deployment automation were itemised) plus 15 to 25 days of expert content review in parallel. That is roughly 9 to 10 weeks with one developer and 5 to 6 weeks with two. General launch: about 79 engineering days in total, roughly 16 weeks with one developer or 8 to 11 weeks with two. The full vision of nine programmes across five levels with AI inspection: 6 to 9 months, mostly content. These are planning estimates, not commitments, and depend on expert reviewers starting now.
 
 ## First move
 Rotate the Neon database password, then start the curriculum review and the learner home work in parallel.

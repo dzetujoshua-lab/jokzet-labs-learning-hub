@@ -62,7 +62,7 @@ Status labels: CV = complete and verified, IN = implemented but not verified, PI
 | 15 | Legacy logic override a personalised plan? | No for registration and `ensureLearnerSetup` (tested). The dashboard still calls legacy daily-mission generation for everyone; it creates nothing without a legacy schedule. |
 
 Production snapshot (aggregate): profiles LEGACY/COMPLETE 4, PERSONALISED/COMPLETE 2, PERSONALISED/IN_PROGRESS 1, PERSONALISED/PLAN_REVIEW 1; plans ACTIVE 2, DRAFT 1.
-Remaining work: learner home for personalised plans, browser end-to-end tests, baseline path, profile backfill (Phase list P0-2, P1-1).
+Remaining work: learner home for personalised plans, browser end-to-end tests, baseline path, profile backfill (see `REMAINING_DEVELOPMENT_PHASES.md`: S2-01, S2-03, S4-04, S7-01).
 
 ## 4. Curriculum (Workstream C)
 Published and live: **18 lessons**, 2 per department across 9 departments (Level 0 only), 9 levels, 19 rubrics, 0 resources.

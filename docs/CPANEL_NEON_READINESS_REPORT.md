@@ -28,7 +28,7 @@ Conclusion: the application can run on this plan and is running. It is operable 
 | Migrations | VERIFIED | `prisma migrate status` against production: 19 migrations, schema up to date after `20261126090000_onboarding_states` (additive enum values). Done on 2026-11-16 with the owner's approval. |
 | Schema drift | Not checked beyond migrate status. |
 | Production data shape (aggregate counts only) | VERIFIED | 14 users (all learners), 8 profiles, 2 ACTIVE plans, 1 DRAFT, 2 submissions, 1 assessment, 1 review request, 3 reminder settings, 19 sessions, 9 departments, 9 levels, 18 published curriculum missions, 19 rubrics, 0 learning resources. |
-| Data anomaly | FOUND | 6 users have no profile (see Security S-07). |
+| Data anomaly | FOUND | 6 users have no profile (see `SECURITY_AUDIT_REPORT.md` SEC-11). |
 | Connection | Works. The pooled host is used. `pg` prints an `sslmode` deprecation warning (use `verify-full`). A Prisma transaction timeout (P2028) was seen once on a cold, scaled-to-zero branch; transaction wait/connection timeouts should be raised. |
 | Backup and recovery | **WEAK** | A manual restore point (`backup-pre-phase1-5…` branch) exists from an earlier phase. No scheduled backup is configured by the project. Neon's own point-in-time window depends on the plan and was not verified. |
 | Credentials | **EXPOSED** | The owner password appeared in clear text earlier and is not rotated. |
