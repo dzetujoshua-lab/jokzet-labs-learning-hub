@@ -4,6 +4,7 @@ import { LIMITS, bucketKey, rateLimitHit } from "@/lib/ratelimit";
 import { addDaysISO, localDateOf, localTimeOf } from "@/lib/schedule/time";
 import { seatsFor, sessionInstant, sessionsPerDay } from "./availability";
 import { daysBetween, slotDates, weekNumberOf } from "./capacity";
+import { ensureEnrolments, LIVE_STATUSES, VISIBLE_STATUSES } from "@/lib/enrolment/service";
 import { loadCatalog } from "./catalog";
 import { generatePlan, GENERATOR_VERSION, inputHashOf, type DraftItem, type DraftPhase, type GenerateInput, type PlanDraft, type PlanSummary } from "./generate";
 import { itemDone, rebalance, type RebalanceItem } from "./rebalance";
@@ -175,6 +176,7 @@ export async function activatePlan(userId: string): Promise<Result<{ planId: str
       }
       await tx.scheduleConfig.updateMany({ where: { userId, isActive: true }, data: { isActive: false } }); // one reminder source at a time
       await linkLearnerMissions(tx, userId, plan.id);
+      await ensureEnrolments(tx, userId, plan.goals.map((g) => g.departmentId)); // the Departments area shows exactly these courses
       await tx.learningPlan.update({ where: { id: plan.id }, data: { status: "ACTIVE", draftKey: null, activeKey: userId, activatedAt: new Date(), timezone: settings.timezone } });
       await event(tx, plan.id, userId, "ACTIVATED", { actor: "LEARNER" });
       return { ok: true, planId: plan.id };
@@ -426,6 +428,7 @@ async function successor(userId: string, now: Date, kind: "EXTENDED" | "SUBJECTS
       });
       await storeDraft(tx, created.id, userId, result.draft, departments);
       await linkLearnerMissions(tx, userId, created.id);
+      await ensureEnrolments(tx, userId, goals.map((g) => departments.get(g.departmentCode)!));
       await event(tx, created.id, userId, "GENERATED", { note: `${result.draft.items.length} sessions`, actor: "LEARNER" });
       await event(tx, created.id, userId, kind, { fromDate: iso(old.endDate), toDate: iso(created.endDate), actor: "LEARNER" });
       return { ok: true, planId: created.id, released };
@@ -483,4 +486,161 @@ export async function recomputePlanItemInstants(userId: string, timezone: string
     await tx.learningPlan.update({ where: { id: plan.id }, data: { timezone } });
   });
   return rows.length;
+}
+
+// ───────────────────────── add a course ─────────────────────────
+
+export type AddCourseRequest = { departmentCode: string; startDate: string; durationDays: number; requestKey?: string };
+export type CoursePreview = {
+  departmentCode: string; startDate: string; endDate: string; weeks: number; sessions: number; minutes: number;
+  fits: boolean; missionsPlanned: number; missionsAvailable: number; contentGapSessions: number; warnings: string[]; alreadyEnrolled: boolean;
+  resources: { lessons: number; withApprovedResource: number };
+  /** Planned practice or review sessions of your other courses that this course would take the seat of (they are cancelled, not deleted). */
+  replacesPracticeSessions: number;
+};
+
+/**
+ * Does the whole approved course fit the free seats? Yes when every available published mission for it was scheduled. The
+ * generator's "shortfall" is different: it counts seats the published content could not fill (a content gap, not a capacity
+ * problem), so it is reported as information and never blocks adding the course.
+ */
+function courseFits(draft: PlanDraft, departmentCode: string): { fits: boolean; planned: number; available: number } {
+  const cov = draft.summary.coverage.find((c) => c.departmentCode === departmentCode);
+  const planned = cov?.missionsPlanned ?? 0;
+  const available = cov?.missionsAvailable ?? 0;
+  return { fits: draft.items.length > 0 && available > 0 && planned >= available, planned, available };
+}
+
+type Addition = { plan: PlanRow; departmentId: string; draft: PlanDraft; occupiedCount: number; releasable: { id: string; seat: string }[] };
+
+/** Builds the new course's sessions into the seats the learner's other courses leave free. Writes nothing. */
+async function planAddition(client: Tx | typeof db, userId: string, req: AddCourseRequest, today: string): Promise<Result<Addition>> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(req.startDate) || req.startDate < today) return fail("Choose a start date that is today or later.");
+  if (!Number.isInteger(req.durationDays) || req.durationDays < 14 || req.durationDays > 365) return fail("Choose a duration between 14 and 365 days.");
+  const department = await client.department.findUnique({ where: { code: req.departmentCode }, select: { id: true } });
+  if (!department) return fail("That course does not exist.");
+  const plan = await loadPlan(client, userId, "ACTIVE");
+  if (!plan) return fail("Confirm your first learning plan before adding another course.");
+  const { catalog } = await loadCatalog();
+  if (!catalog.some((m) => m.departmentCode === req.departmentCode && m.role === "LESSON")) {
+    return fail("This course has no approved curriculum yet, so it cannot be added.");
+  }
+  // Seats already booked by the learner's other courses. The one exception is generic practice or review time that is still
+  // planned, in the future and not started: it is filler, so a new course may take its seat (it is cancelled, never deleted,
+  // and the change is recorded). Teaching, checkpoints, baselines, catch-ups and anything started, done or missed are never moved.
+  const rows = await client.learningPlanItem.findMany({ where: { planId: plan.id, userId, status: { not: "CANCELLED" } }, select: { id: true, date: true, slotIndex: true, kind: true, status: true, practisedAt: true } });
+  const isFiller = (r: (typeof rows)[number]) => r.status === "PLANNED" && (r.kind === "PRACTICE" || r.kind === "REVIEW") && r.practisedAt === null && iso(r.date) >= req.startDate;
+  const occupied = rows.filter((r) => !isFiller(r));
+  const releasable = rows.filter(isFiller).map((r) => ({ id: r.id, seat: `${iso(r.date)}#${r.slotIndex}` }));
+  const { input } = await buildInput(client, userId, plan, [{ departmentCode: req.departmentCode, weight: 3, targetLevel: 1 }], req.startDate, req.durationDays);
+  const result = generatePlan({ ...input, occupied: occupied.map((o) => ({ date: iso(o.date), slotIndex: o.slotIndex })) });
+  if (!result.ok) return fail(result.error);
+  if (result.draft.items.length + occupied.length > MAX_ITEMS) return fail("This would make your schedule too large. Choose a shorter duration.");
+  const used = new Set(result.draft.items.map((i) => `${i.date}#${i.slotIndex}`));
+  return { ok: true, plan, departmentId: department.id, draft: result.draft, occupiedCount: occupied.length, releasable: releasable.filter((r) => used.has(r.seat)) };
+}
+
+async function resourceCounts(departmentCode: string) {
+  const lessons = await db.mission.findMany({
+    where: { createdById: null, isPublished: true, category: "CURRICULUM_MISSION", role: "LESSON", department: { code: departmentCode } },
+    select: { missionResources: { where: { resource: { status: "APPROVED" } }, select: { resourceId: true }, take: 1 } },
+  });
+  return { lessons: lessons.length, withApprovedResource: lessons.filter((l) => l.missionResources.length > 0).length };
+}
+
+/**
+ * Shows what adding a course would do, without changing anything: the sessions it would add, when it would finish, and
+ * whether it fits the learner's shared availability next to their other courses. When it does not fit, nothing is added
+ * and the learner is told how to make room (more study time, more days, a longer duration or a later start).
+ */
+export async function previewAddCourse(userId: string, req: AddCourseRequest, now: Date = new Date()): Promise<Result<{ preview: CoursePreview }>> {
+  const mode = await requirePersonalised(userId);
+  if (!mode.ok) return mode;
+  const plan = await loadPlan(db, userId, "ACTIVE");
+  const today = localDateOf(now, plan?.timezone ?? "UTC");
+  const existing = await db.courseEnrolment.findFirst({ where: { userId, department: { code: req.departmentCode }, status: { in: [...VISIBLE_STATUSES] } }, select: { id: true } });
+  const built = await planAddition(db, userId, req, today);
+  if (!built.ok) return built;
+  const items = built.draft.items;
+  const last = items.reduce((m, i) => (i.date > m ? i.date : m), req.startDate);
+  const summary = built.draft.summary;
+  const contentGap = summary.shortfall.reduce((n, s) => n + s.sessions, 0);
+  const fit = courseFits(built.draft, req.departmentCode);
+  return {
+    ok: true,
+    preview: {
+      departmentCode: req.departmentCode, startDate: req.startDate, endDate: last, weeks: Math.max(1, ...items.map((i) => i.weekNumber)), sessions: items.length,
+      minutes: items.reduce((n, i) => n + i.minutes, 0), fits: fit.fits, missionsPlanned: fit.planned, missionsAvailable: fit.available, contentGapSessions: contentGap, warnings: summary.warnings,
+      alreadyEnrolled: !!existing, resources: await resourceCounts(req.departmentCode), replacesPracticeSessions: built.releasable.length,
+    },
+  };
+}
+
+/**
+ * Adds a course to the learner's running schedule. The learner's other courses are not touched: the new course's sessions are
+ * placed only in seats that are free, every existing session keeps its date, time and history, and the whole thing is one
+ * transaction. Repeating the request (same learner and course, or the same request key) returns the existing enrolment and
+ * adds nothing.
+ */
+export async function addCourse(userId: string, req: AddCourseRequest, now: Date = new Date()): Promise<Result<{ enrolmentId: string; created: boolean; sessions: number }>> {
+  const mode = await requirePersonalised(userId);
+  if (!mode.ok) return mode;
+  const limit = await rateLimitHit(bucketKey("plan:change", userId), LIMITS.planChange);
+  if (!limit.ok) return fail("Please slow down.");
+
+  try {
+    return await db.$transaction(async (tx): Promise<Result<{ enrolmentId: string; created: boolean; sessions: number }>> => {
+      const active = await loadPlan(tx, userId, "ACTIVE");
+      const today = localDateOf(now, active?.timezone ?? "UTC");
+      if (req.requestKey) {
+        const again = await tx.courseEnrolment.findUnique({ where: { userId_requestKey: { userId, requestKey: req.requestKey } }, select: { id: true } });
+        if (again) return { ok: true, enrolmentId: again.id, created: false, sessions: 0 };
+      }
+      const existing = await tx.courseEnrolment.findFirst({ where: { userId, department: { code: req.departmentCode }, status: { in: [...VISIBLE_STATUSES] } }, select: { id: true } });
+      if (existing) return { ok: true, enrolmentId: existing.id, created: false, sessions: 0 };
+
+      const built = await planAddition(tx, userId, req, today);
+      if (!built.ok) return built;
+      const { plan, draft, departmentId, releasable } = built;
+      if (!courseFits(draft, req.departmentCode).fits) {
+        throw new Stop("This course does not fit your current study time next to your other courses. Add study time or study days, choose a longer duration, or start later.");
+      }
+
+      if (releasable.length) await tx.learningPlanItem.updateMany({ where: { id: { in: releasable.map((r) => r.id) }, userId, status: "PLANNED" }, data: { status: "CANCELLED" } });
+      const enrolment = await tx.courseEnrolment.create({ data: { userId, departmentId, status: "ACTIVE", requestKey: req.requestKey } });
+      await tx.learningGoal.create({ data: { planId: plan.id, userId, departmentId, weight: 3, targetLevel: 1 } });
+
+      const lastPhase = await tx.learningPlanPhase.aggregate({ where: { planId: plan.id, userId }, _max: { position: true } });
+      const lastItem = await tx.learningPlanItem.aggregate({ where: { planId: plan.id, userId }, _max: { position: true } });
+      const phaseBase = lastPhase._max.position ?? 0;
+      const itemBase = lastItem._max.position ?? 0;
+      const phaseIds: string[] = [];
+      for (const p of draft.phases) {
+        const row = await tx.learningPlanPhase.create({
+          data: { planId: plan.id, userId, position: phaseBase + p.position, kind: p.kind, title: p.title, objective: p.objective, startDate: asDate(p.startDate), endDate: asDate(p.endDate) },
+        });
+        phaseIds.push(row.id);
+      }
+      const planStart = iso(plan.startDate);
+      await tx.learningPlanItem.createMany({
+        data: draft.items.map((i) => ({
+          planId: plan.id, userId, phaseId: phaseIds[i.phaseIndex], date: asDate(i.date), startAt: i.startAt, position: itemBase + i.position, slotIndex: i.slotIndex, kind: i.kind, minutes: i.minutes,
+          title: i.title, objective: i.objective, weekNumber: Math.floor(daysBetween(planStart, i.date) / 7) + 1, departmentId, missionId: i.missionId, stepFrom: i.stepFrom, stepTo: i.stepTo, continuesPrev: i.continuesPrev,
+        })),
+      });
+      const last = draft.items.reduce((m, i) => (i.date > m ? i.date : m), iso(plan.endDate));
+      if (last > iso(plan.endDate)) await tx.learningPlan.update({ where: { id: plan.id }, data: { endDate: asDate(last), durationDays: daysBetween(planStart, last) + 1 } });
+      await linkLearnerMissions(tx, userId, plan.id);
+      await event(tx, plan.id, userId, "SUBJECTS_CHANGED", { note: `Course added: ${req.departmentCode} (${draft.items.length} sessions, ${releasable.length} spare practice sessions replaced; no teaching, started, done or missed session moved)`, actor: "LEARNER" });
+      return { ok: true, enrolmentId: enrolment.id, created: true, sessions: draft.items.length };
+    });
+  } catch (e) {
+    if (e instanceof Stop) return fail(e.message);
+    // Two identical requests at once: the second hits the one-live-enrolment-per-course index and gets the first one's result.
+    if (e instanceof Error && "code" in e && (e as { code?: string }).code === "P2002") {
+      const again = await db.courseEnrolment.findFirst({ where: { userId, department: { code: req.departmentCode }, status: { in: [...LIVE_STATUSES] } }, select: { id: true } });
+      if (again) return { ok: true, enrolmentId: again.id, created: false, sessions: 0 };
+    }
+    throw e;
+  }
 }

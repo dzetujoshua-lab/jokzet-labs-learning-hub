@@ -11,6 +11,8 @@ import { getAssessmentContext } from "@/lib/assessments/service";
 import { ReviewStatus } from "@/components/reviews/review-status";
 import { requireUser } from "@/lib/auth/dal";
 import { getReviewState } from "@/lib/reviews/service";
+import { AiAssessmentPanel } from "@/components/assessments/ai-assessment-panel";
+import { getAiJobView } from "@/lib/ai/view";
 import { fmtDate, metaFor, toLabel } from "@/lib/programme";
 
 export const metadata: Metadata = { title: "Assessment" };
@@ -26,6 +28,7 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
   const rubric = mission.rubric;
   const assessed = submission.status === "ASSESSED" && submission.assessment;
   const reviewState = assessed ? await getReviewState(user.id, submission.assessment!.id) : null;
+  const aiView = await getAiJobView(user.id, submission.id); // owner-scoped; null when the AI assessor was not involved
 
   return (
     <div className="space-y-6">
@@ -57,10 +60,11 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          {aiView ? <AiAssessmentPanel view={aiView} /> : null}
           {reviewState ? <ReviewStatus state={reviewState} canAsk /> : null}
           {assessed ? (
             <AssessmentResult assessment={submission.assessment!} />
-          ) : rubric ? (
+          ) : aiView?.processing ? null : rubric ? (
             <RubricForm
               submissionId={submission.id}
               passingScore={rubric.passingScore}

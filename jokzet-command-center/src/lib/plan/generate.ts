@@ -41,6 +41,11 @@ export type GenerateInput = {
   catalog: CatalogMission[];
   catalogVersion: string;
   passed: string[]; // ids of missions the learner has already passed
+  /**
+   * Seats (study day + session of that day) that are already booked, by another course in the same schedule. They are never
+   * used. Only present when a course is added to a running schedule, so every other plan's input hash is unchanged.
+   */
+  occupied?: { date: string; slotIndex: number }[];
 };
 
 export type ItemKind = "TEACHING" | "BASELINE" | "CHECKPOINT" | "PRACTICE" | "REVIEW" | "CATCH_UP";
@@ -182,7 +187,8 @@ const PHASE_OBJECTIVE: Record<DraftPhase["kind"], string> = {
 export function generatePlan(input: GenerateInput): GenerateResult {
   const L = input.sessionMinutes;
   const perDay = sessionsPerDay(input.dailyStudyMinutes, L, input.breakMinutes);
-  const seats = seatsFor(slotDates(input.startDate, input.durationDays, input.weekdays), perDay);
+  const booked = new Set((input.occupied ?? []).map((o) => `${o.date}#${o.slotIndex}`));
+  const seats = seatsFor(slotDates(input.startDate, input.durationDays, input.weekdays), perDay).filter((s) => !booked.has(`${s.date}#${s.index}`));
   const slots = seats.map((s) => s.date); // one entry per seat (a study day repeats once per session of that day)
   const S = slots.length;
   if (S < 2) return { ok: false, error: "Choose more days or a longer duration: this plan has fewer than two study sessions." };

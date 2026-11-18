@@ -52,7 +52,7 @@ export async function requestReview(userId: string, assessmentId: string): Promi
     const assessment = await tx.assessment.findFirst({ where: { id: assessmentId, userId }, include: { reviewRequest: true, rubric: { select: { mission: { select: { role: true } } } } } });
     if (!assessment) return fail("Assessment not found.");
     if (assessment.rubric.mission.role === "BASELINE") return fail("A baseline is a placement exercise and is not reviewed.");
-    if (assessment.status !== "SELF_RECORDED") {
+    if (assessment.status !== "SELF_RECORDED" && assessment.status !== "AI_ASSESSED") {
       return fail(assessment.status === "PENDING_REVIEW" ? "A review has already been requested." : "This assessment has already been reviewed.");
     }
     if (assessment.reviewRequest && assessment.reviewRequest.status !== "CANCELLED") return fail("A review has already been requested.");
@@ -71,14 +71,16 @@ export async function cancelReviewRequest(userId: string, assessmentId: string):
   return db.$transaction(async (tx) => {
     const { count } = await tx.reviewRequest.updateMany({ where: { assessmentId, userId, status: "OPEN" }, data: { status: "CANCELLED", closedAt: new Date() } });
     if (count === 0) return fail("This request can no longer be withdrawn.");
-    await tx.assessment.updateMany({ where: { id: assessmentId, userId, status: "PENDING_REVIEW" }, data: { status: "SELF_RECORDED" } });
+    // Back to what it was: an AI result returns to AI_ASSESSED, a self-assessment to SELF_RECORDED.
+    await tx.assessment.updateMany({ where: { id: assessmentId, userId, status: "PENDING_REVIEW", assessorKind: "AUTOMATED" }, data: { status: "AI_ASSESSED" } });
+    await tx.assessment.updateMany({ where: { id: assessmentId, userId, status: "PENDING_REVIEW", assessorKind: "SELF" }, data: { status: "SELF_RECORDED" } });
     return { ok: true } as const;
   });
 }
 
 export type ReviewState = {
   assessmentId: string;
-  status: "SELF_RECORDED" | "PENDING_REVIEW" | "VERIFIED" | "NEEDS_REVISION" | "REJECTED";
+  status: "SELF_RECORDED" | "AI_ASSESSED" | "PENDING_REVIEW" | "VERIFIED" | "NEEDS_REVISION" | "REJECTED";
   requestStatus: "OPEN" | "CLAIMED" | "DONE" | "CANCELLED" | null;
   latestReview: { reviewerLabel: string; decision: ReviewDecision; reason: string | null; percentage: number; outcome: AssessmentOutcome; at: string } | null;
 };
