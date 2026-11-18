@@ -26,11 +26,13 @@ describe("the policy is public", () => {
   const call = (p: string, cookie?: string) => proxy(new NextRequest(`http://localhost${p}`, cookie ? { headers: { cookie } } : undefined));
 
   it("needs no sign-in, while private pages still do", () => {
-    for (const p of ["/privacy-policy", "/login", "/register"]) {
+    for (const p of ["/privacy-policy", "/login", "/register", "/welcome"]) {
       const r = call(p);
       expect(r.headers.get("location"), p).toBeNull(); // not redirected
     }
-    for (const p of ["/", "/missions", "/timetable", "/privacy-policy-private", "/privacy-policy/extra"]) {
+    // The main address shows signed-out visitors the public homepage; every other private page asks them to sign in.
+    expect(call("/").headers.get("location")).toMatch(/\/welcome$/);
+    for (const p of ["/missions", "/timetable", "/privacy-policy-private", "/privacy-policy/extra"]) {
       const r = call(p);
       expect(r.status, p).toBe(307);
       expect(r.headers.get("location")).toMatch(/\/login$/);
