@@ -72,4 +72,9 @@ Phones: fewer doodles and no particles. Reduced motion: every continuous animati
 Criterion-to-resource mapping (needs a link table and content); per-course syllabus page, pause and withdraw; Playwright end-to-end tests; approved videos; public portfolio sharing; the sidebar's original level and XP summary is unchanged; reviewer and admin areas share the "minimal" background rather than a separate setting; production deployment.
 
 ## 9. Test and build results
-Recorded below after the final full run (updated at the end of this file).
+Final full run on branch `feature/friday-sprint`, 2026-11-18:
+- `npx eslint src tests`: clean.
+- `npx tsc --noEmit`: clean.
+- `npx vitest run` (real local test database): 45 files, **609 tests, 609 passed, 0 failed, 0 skipped**.
+- `npm run build`: exit 0, "Compiled successfully".
+These results are local only. Nothing has been deployed or verified on the live site.
