@@ -1,34 +1,48 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// Applied by Next.js itself so they cover server-rendered responses too (Netlify's [[headers]] only reach static files).
-// Content-Security-Policy, in REPORT-ONLY mode: browsers log violations in the console but block nothing, so we can see what
-// a strict policy would break before enforcing it. The only third-party origin allowed is the video provider's
-// privacy-enhanced embed host, and only as a frame. 'unsafe-inline' is needed for Next.js's own inline scripts until a
-// nonce-based policy is added; 'unsafe-eval' is development-only (React refresh).
-const isDev = process.env.NODE_ENV !== "production";
-export const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
-  "frame-src 'self' https://www.youtube-nocookie.com",
-  "media-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
+// Security headers, applied by Next.js itself so they cover server-rendered responses too.
+//
+// In production the Content-Security-Policy is ENFORCED and Strict-Transport-Security is sent. In development the policy stays
+// report-only (the dev server needs 'unsafe-eval' and websockets) and HSTS is not sent. The only third-party origin allowed is the
+// video provider's privacy-enhanced embed host, and only as a frame. 'unsafe-inline' scripts remain because Next.js writes small
+// inline bootstrap scripts; replacing that with per-request nonces is a separate piece of work. Everything else is locked down:
+// no other script, frame, object, form or base address, and no other site may frame this one (frame-ancestors).
+export function contentSecurityPolicy(production: boolean): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src 'self'${production ? "" : " ws: wss:"}`,
+    "frame-src 'self' https://www.youtube-nocookie.com",
+    "media-src 'self' blob:",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(production ? ["upgrade-insecure-requests"] : []),
+  ].join("; ");
+}
 
-const securityHeaders = [
-  { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
-  { key: "X-Frame-Options", value: "DENY" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-];
+// 180 days. No includeSubDomains and no preload on purpose: this host shares a parent domain with other sites, and neither can be
+// undone quickly. To back out, send max-age=0 over HTTPS and the browser forgets it.
+export const HSTS_MAX_AGE_SECONDS = 15_552_000;
+
+export function securityHeaders(production: boolean): { key: string; value: string }[] {
+  return [
+    { key: production ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(production) },
+    ...(production ? [{ key: "Strict-Transport-Security", value: `max-age=${HSTS_MAX_AGE_SECONDS}` }] : []),
+    { key: "X-Frame-Options", value: "DENY" },
+    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()" },
+    { key: "X-Content-Type-Options", value: "nosniff" },
+    { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  ];
+}
 
 // Public address of the deployment (for example https://jokzet-labs.iipghstudent.com). Behind a reverse proxy the Host header the
 // server sees can differ from the address in the browser, so Server Actions are told which host to trust. Unset on Netlify.
@@ -46,7 +60,7 @@ const nextConfig: NextConfig = {
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   ...(publicHost ? { experimental: { serverActions: { allowedOrigins: [publicHost] } } } : {}),
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [{ source: "/:path*", headers: securityHeaders(process.env.NODE_ENV === "production") }];
   },
   cacheComponents: true,
   partialPrefetching: true,
