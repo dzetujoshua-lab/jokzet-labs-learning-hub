@@ -6,7 +6,8 @@ import { requireOnboardedUser as requireUser } from "@/lib/auth/dal";
 import { setCorrectionResolved, assessSubmission, type AssessResult } from "@/lib/assessments/service";
 import { deleteEvidence } from "@/lib/evidence/service";
 import { attachToDraft, detachFromDraft } from "@/lib/missions/submissions";
-import { createMissionSchema } from "@/lib/missions/schema";
+import { db } from "@/lib/db";
+import { createMissionSchema, MAX_CUSTOM_MISSIONS } from "@/lib/missions/schema";
 import { saveProgress, saveProgressSchema, startMission, submitMission } from "@/lib/missions/progress";
 import { milestoneSchema } from "@/lib/missions/schema";
 import { createCustomMission, deleteMission, saveNextMilestone, setMissionDone } from "@/lib/missions/service";
@@ -53,6 +54,10 @@ export async function createMission(_prev: MissionFormState, formData: FormData)
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
+  const limit = await rateLimitHit(bucketKey("mission:create", user.id), LIMITS.customMissionUser);
+  if (!limit.ok) return { error: "You are creating tasks very quickly. Please wait a little and try again." };
+  const existing = await db.mission.count({ where: { createdById: user.id } });
+  if (existing >= MAX_CUSTOM_MISSIONS) return { error: "You have reached the limit for self-made tasks. Delete some you no longer need." };
   await createCustomMission(user.id, parsed.data);
   refresh();
   return { ok: true };

@@ -1,45 +1,11 @@
-import { Suspense } from "react";
-import { AppShell } from "@/components/layout/app-shell";
-import { AuthGate } from "@/components/layout/auth-gate";
-import { NavGate } from "@/components/layout/nav-gate";
-import { DesktopNav, MobileNav } from "@/components/layout/nav-links";
-import { MobileLevel, SidebarProgress, SidebarProgressFallback, SignOutButton } from "@/components/layout/sidebar-slots";
-import Loading from "./loading";
+import { AppFrame } from "@/components/layout/app-frame";
 
 // Every page here depends on the signed-in user (a per-request session lookup), so navigations INTO the app from
 // outside (e.g. after sign-in) are blocking by design. This opts that entry out of Next's instant-navigation
-// validation only; streaming and the Suspense fallbacks below are unchanged, and navigations between pages inside
+// validation only; streaming and the Suspense fallbacks are unchanged, and navigations between pages inside
 // the app are still validated. See node_modules/next/dist/docs/01-app/02-guides/instant-navigation.md (Opting out).
 export const instant = false;
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
-  return (
-    <AppShell
-      sidebarProgress={
-        <Suspense fallback={<SidebarProgressFallback />}>
-          <SidebarProgress />
-        </Suspense>
-      }
-      mobileLevel={
-        <Suspense fallback={null}>
-          <MobileLevel />
-        </Suspense>
-      }
-      signOut={<SignOutButton />}
-      desktopNav={
-        <Suspense fallback={<DesktopNav />}>
-          <NavGate variant="desktop" />
-        </Suspense>
-      }
-      mobileNav={
-        <Suspense fallback={<MobileNav />}>
-          <NavGate variant="mobile" />
-        </Suspense>
-      }
-    >
-      <Suspense fallback={<Loading />}>
-        <AuthGate>{children}</AuthGate>
-      </Suspense>
-    </AppShell>
-  );
+  return <AppFrame enforceOnboarding>{children}</AppFrame>;
 }

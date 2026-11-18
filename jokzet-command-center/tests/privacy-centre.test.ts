@@ -23,11 +23,11 @@ describe("the Privacy page is reachable and private", () => {
   });
 
   it("holds the three panels, and Settings points there instead of duplicating them", () => {
-    const page = src("src/app/(app)/privacy/page.tsx");
+    const page = src("src/app/(account)/privacy/page.tsx");
     for (const needle of ['aria-labelledby="your-data"', 'aria-labelledby="policy-contact"', 'aria-labelledby="delete-account"', "/api/account/export", "<DeleteAccountForm />"]) {
       expect(page, needle).toContain(needle);
     }
-    const settings = src("src/app/(app)/settings/page.tsx");
+    const settings = src("src/app/(account)/settings/page.tsx");
     expect(settings).toContain('href="/privacy"');
     expect(settings).not.toContain("DeleteAccountForm");
     expect(settings).not.toContain("/api/account/export");

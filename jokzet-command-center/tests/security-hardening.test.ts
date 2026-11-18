@@ -213,7 +213,7 @@ describe("secret scanning on learner free text", () => {
 });
 
 describe("assessed history cannot be deleted from the board", () => {
-  it("refuses to delete a mission with submissions, but still deletes a self-made task and revokes its XP", async () => {
+  it("refuses to delete a mission with submissions, but still deletes a self-made task, which never earned XP", async () => {
     const reg = await registerUser({ displayName: "Sec", email: mail("history"), password: PASSWORD });
     if (!reg.ok) throw new Error("registration failed");
     const userId = reg.userId;
@@ -231,10 +231,10 @@ describe("assessed history cannot be deleted from the board", () => {
     if (!other.ok) throw new Error("registration failed");
     expect(await deleteMission(other.userId, lm.id)).toBe(false);
 
-    // A self-made task (no submissions) still deletes and revokes its XP.
+    // A self-made task (no submissions) still deletes; ticking it off never awarded XP in the first place.
     const custom = await createCustomMission(userId, { title: "My own task", departmentCode: "fswd", date: "2026-11-16", minutes: 30, kind: "Build", evidenceType: "Screenshot", xpReward: 20, notes: "" });
     await setMissionDone(userId, custom.id, true);
-    expect(await getTotalXp(userId)).toBe(20);
+    expect(await getTotalXp(userId)).toBe(0);
     expect(await deleteMission(userId, custom.id)).toBe(true);
     expect(await getTotalXp(userId)).toBe(0);
   });

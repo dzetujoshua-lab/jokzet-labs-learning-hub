@@ -333,16 +333,18 @@ export async function completeReview(actor: Actor, requestId: string, input: Com
         if (!wasCredited) {
           // The reviewer upgraded a result that had not passed.
           await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "PASSED", completedAt: lm.completedAt ?? now } });
-          if (credited && lm.xpAwarded === 0) {
-            await tx.learnerMission.update({ where: { id: lm.id }, data: { xpAwarded: lm.mission.xpReward } });
-            await adjustDepartmentXp(tx, a.userId, lm.mission.departmentId, lm.mission.xpReward);
-          }
-          if (credited && missionSkillIds.length) {
-            await tx.userSkill.createMany({ data: missionSkillIds.map((skillId) => ({ userId: a.userId, skillId, earnedAt: now })), skipDuplicates: true });
-          }
-          await tx.evidenceItem.updateMany({ where: { submissionId: a.submission.id }, data: { status: "VERIFIED" } });
-          creditChange = credited ? "granted" : "none";
         }
+        // Official credit is granted here and only here: self-assessment alone never awards XP or skills (supervised-beta
+        // policy). The xpAwarded === 0 guard makes it safe to repeat; skills use skipDuplicates.
+        if (credited && lm.xpAwarded === 0) {
+          await tx.learnerMission.update({ where: { id: lm.id }, data: { xpAwarded: lm.mission.xpReward } });
+          await adjustDepartmentXp(tx, a.userId, lm.mission.departmentId, lm.mission.xpReward);
+          creditChange = "granted";
+        }
+        if (credited && missionSkillIds.length) {
+          await tx.userSkill.createMany({ data: missionSkillIds.map((skillId) => ({ userId: a.userId, skillId, earnedAt: now })), skipDuplicates: true });
+        }
+        await tx.evidenceItem.updateMany({ where: { submissionId: a.submission.id }, data: { status: "VERIFIED" } });
         if (credited && missionSkillIds.length) {
           await tx.userSkill.updateMany({ where: { userId: a.userId, skillId: { in: missionSkillIds } }, data: { tier: "VERIFIED" } });
           const level = competencyLevelFor(percentage);
@@ -356,8 +358,8 @@ export async function completeReview(actor: Actor, requestId: string, input: Com
         // A pass that earned credit has not been verified: take the credit back, and ask the learner to resubmit.
         await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "NEEDS_REVISION", completedAt: null, xpAwarded: 0 } });
         if (lm.xpAwarded > 0) await adjustDepartmentXp(tx, a.userId, lm.mission.departmentId, -lm.xpAwarded);
-        if (credited && missionSkillIds.length) {
-          // Remove a skill only if no OTHER passed curriculum mission still teaches it.
+        if (credited && lm.xpAwarded > 0 && missionSkillIds.length) {
+          // Official credit had been granted by an earlier reviewer decision: take its skills back. Remove a skill only if no OTHER passed curriculum mission still teaches it.
           for (const skillId of missionSkillIds) {
             const other = await tx.learnerMission.count({
               where: { userId: a.userId, id: { not: lm.id }, status: "PASSED", mission: { category: "CURRICULUM_MISSION", skills: { some: { skillId } } } },
@@ -367,7 +369,7 @@ export async function completeReview(actor: Actor, requestId: string, input: Com
         }
         await tx.skillCompetency.deleteMany({ where: { userId: a.userId, assessmentId: a.id } });
         await tx.evidenceItem.updateMany({ where: { submissionId: a.submission.id }, data: { status: "LOGGED" } });
-        creditChange = credited ? "revoked" : "none";
+        creditChange = credited && lm.xpAwarded > 0 ? "revoked" : "none"; // a self-assessed pass held no official credit to revoke
       } else if (d.decision === "REJECT" && lm.status !== "NEEDS_REVISION") {
         await tx.learnerMission.update({ where: { id: lm.id }, data: { status: "NEEDS_REVISION" } });
       }

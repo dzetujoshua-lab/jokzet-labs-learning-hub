@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { EVIDENCE_TYPES, MISSION_KINDS } from "@/lib/programme";
-import { MAX_CUSTOM_XP } from "@/lib/missions/schema";
 
 type Dept = { code: string; name: string };
 
@@ -87,14 +86,10 @@ function Form({
         </FormField>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Minutes">
-          <Input type="number" name="minutes" min={5} max={480} step={5} defaultValue={45} />
-        </FormField>
-        <FormField label="XP reward">
-          <Input type="number" name="xpReward" min={5} max={MAX_CUSTOM_XP} step={5} defaultValue={25} />
-        </FormField>
-      </div>
+      <FormField label="Minutes">
+        <Input type="number" name="minutes" min={5} max={480} step={5} defaultValue={45} />
+      </FormField>
+      <p className="text-xs text-muted-foreground">Your own tasks are practice and do not earn XP. XP comes from curriculum missions confirmed by a reviewer.</p>
 
       <FormField label="Notes">
         <Textarea name="notes" rows={3} maxLength={500} placeholder="Constraints, links, what done looks like…" />

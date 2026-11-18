@@ -194,12 +194,12 @@ describe("completing a review", () => {
     expect(await claimRequest(people.Rita.actor, requestId)).toEqual({ ok: true });
 
     const result = await completeReview(people.Rita.actor, requestId, { decision: "CONFIRM", reason: "Clear evidence and clean work." });
-    expect(result).toMatchObject({ ok: true, decision: "CONFIRM", outcome: "PASS", percentage: 100, creditChange: "none" });
+    expect(result).toMatchObject({ ok: true, decision: "CONFIRM", outcome: "PASS", percentage: 100, creditChange: "granted" }); // the reviewer's confirmation is what grants official credit
 
     const after = await db.assessment.findUniqueOrThrow({ where: { id: assessmentId }, include: { scores: true } });
     expect(after).toMatchObject({ status: "VERIFIED", assessorKind: "HUMAN", totalPoints: before.totalPoints, percentage: before.percentage });
     expect(after.scores.map((s) => [s.criterionId, s.points]).sort()).toEqual(before.scores.map((s) => [s.criterionId, s.points]).sort()); // self scores kept
-    expect(await getTotalXp(people.Learner.id)).toBe(xpBefore); // no second award
+    expect(await getTotalXp(people.Learner.id)).toBe(xpBefore + mission.xpReward); // awarded once, by the reviewer
 
     const skills = await db.userSkill.findMany({ where: { userId: people.Learner.id, skillId: { in: mission.skills.map((s) => s.skillId) } } });
     expect(skills.length).toBe(mission.skills.length);
@@ -219,11 +219,11 @@ describe("completing a review", () => {
     expect(await requestReview(people.Learner.id, assessmentId)).toMatchObject({ ok: false, error: expect.stringMatching(/already been reviewed/) });
   });
 
-  it("ADJUST that lowers a credited pass takes the credit back and invites a resubmission", async () => {
+  it("ADJUST that lowers a self-assessed pass leaves no official credit and invites a resubmission", async () => {
     const { assessmentId, learnerMissionId, criteria } = await selfAssess(people.Other.id, "FSWD-L0-02", FULLS["FSWD-L0-02"]);
     const mission = await db.mission.findUniqueOrThrow({ where: { code: "FSWD-L0-02" }, include: { skills: true } });
     const xpBefore = await getTotalXp(people.Other.id);
-    expect(await db.userSkill.count({ where: { userId: people.Other.id, skillId: { in: mission.skills.map((s) => s.skillId) } } })).toBe(mission.skills.length);
+    expect(await db.userSkill.count({ where: { userId: people.Other.id, skillId: { in: mission.skills.map((s) => s.skillId) } } })).toBe(0); // self-assessment grants no skills
     await requestReview(people.Other.id, assessmentId);
     const requestId = await requestFor(assessmentId);
     await claimRequest(people.Rita.actor, requestId);
@@ -231,16 +231,12 @@ describe("completing a review", () => {
     const result = await completeReview(people.Rita.actor, requestId, {
       decision: "ADJUST", reason: "The page is not responsive and there is no evidence of testing.", scores: criteria.map((c) => ({ criterionId: c.id, points: Math.floor(c.maxPoints / 4), comment: "Needs work" })),
     });
-    expect(result).toMatchObject({ ok: true, decision: "ADJUST", outcome: "FAIL", creditChange: "revoked" });
-    expect(await getTotalXp(people.Other.id)).toBe(xpBefore - mission.xpReward);
+    expect(result).toMatchObject({ ok: true, decision: "ADJUST", outcome: "FAIL", creditChange: "none" });
+    expect(await getTotalXp(people.Other.id)).toBe(xpBefore); // nothing had been granted, so nothing is taken back
     const lm = await db.learnerMission.findUniqueOrThrow({ where: { id: learnerMissionId } });
     expect(lm).toMatchObject({ status: "NEEDS_REVISION", xpAwarded: 0, completedAt: null });
-    // A skill is removed only if no OTHER passed curriculum mission still teaches it (this learner also passed FSWD-L0-01).
-    const stillTaught = await db.missionSkill.findMany({ where: { skillId: { in: mission.skills.map((s) => s.skillId) }, mission: { code: { not: "FSWD-L0-02" }, learnerMissions: { some: { userId: people.Other.id, status: "PASSED" } } } }, select: { skillId: true } });
-    const keep = new Set(stillTaught.map((x) => x.skillId));
     const left = await db.userSkill.findMany({ where: { userId: people.Other.id, skillId: { in: mission.skills.map((s) => s.skillId) } }, select: { skillId: true } });
-    expect(new Set(left.map((x) => x.skillId))).toEqual(keep);
-    expect(left.length).toBeLessThan(mission.skills.length); // at least one skill was taken back
+    expect(left).toHaveLength(0); // no skills were ever granted by the self-assessment, and a reviewer's FAIL grants none
     expect(await db.skillCompetency.count({ where: { userId: people.Other.id, assessmentId } })).toBe(0);
     expect((await db.assessment.findUniqueOrThrow({ where: { id: assessmentId } })).status).toBe("VERIFIED"); // the (negative) result is verified
     const review = await db.assessmentReview.findFirstOrThrow({ where: { assessmentId }, include: { scores: true } });
@@ -273,9 +269,8 @@ describe("completing a review", () => {
     expect(await db.skillCompetency.count({ where: { userId: people.Learner.id, assessmentId } })).toBe(mission.skills.length);
   }, 120_000);
 
-  it("REJECT does not accept the work, needs a reason, and revokes earned credit", async () => {
+  it("REJECT does not accept the work and needs a reason; it grants nothing", async () => {
     const { assessmentId, learnerMissionId } = await selfAssess(people.Other.id, "SEC-L0-02", FULLS["SEC-L0-02"]);
-    const mission = await db.mission.findUniqueOrThrow({ where: { code: "SEC-L0-02" } });
     const xpBefore = await getTotalXp(people.Other.id);
     await requestReview(people.Other.id, assessmentId);
     const requestId = await requestFor(assessmentId);
@@ -285,10 +280,10 @@ describe("completing a review", () => {
     await releaseRequest(people.Rita.actor, requestId);
     await claimRequest(people.Ada.actor, requestId);
     const result = await completeReview(people.Ada.actor, requestId, { decision: "REJECT", reason: "The screenshots do not show your own lab." });
-    expect(result).toMatchObject({ ok: true, decision: "REJECT", outcome: "FAIL", percentage: 0, creditChange: "revoked" });
+    expect(result).toMatchObject({ ok: true, decision: "REJECT", outcome: "FAIL", percentage: 0, creditChange: "none" });
+    expect(await getTotalXp(people.Other.id)).toBe(xpBefore);
     expect((await db.assessment.findUniqueOrThrow({ where: { id: assessmentId } })).status).toBe("REJECTED");
     expect((await db.learnerMission.findUniqueOrThrow({ where: { id: learnerMissionId } })).status).toBe("NEEDS_REVISION");
-    expect(await getTotalXp(people.Other.id)).toBe(xpBefore - mission.xpReward);
   }, 120_000);
 
   it("verifies a personal activity without any XP, skills or competency (practice earns none)", async () => {

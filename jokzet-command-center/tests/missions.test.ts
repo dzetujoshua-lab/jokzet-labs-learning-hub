@@ -6,7 +6,7 @@ import {
   createCustomMission, deleteMission, getTotalXp, listDepartments, listMissions, saveNextMilestone, setMissionDone,
 } from "@/lib/missions/service";
 import { getMissionDetail, saveProgress, startMission, submitMission } from "@/lib/missions/progress";
-import { computeStreak, levelProgress, sameIsoWeek, todayISO } from "@/lib/programme";
+import { computeStreak, sameIsoWeek, todayISO } from "@/lib/programme";
 import { MAX_CUSTOM_XP } from "@/lib/missions/schema";
 
 const A = "mission-test-a@example.test";
@@ -69,12 +69,12 @@ describe("registration schedules Level 0", () => {
 });
 
 describe("XP and levels (server side, idempotent)", () => {
-  it("awards XP once, never twice, and revokes it when un-done", async () => {
+  it("ticking a task off records progress but never awards official XP, and un-ticking restores it", async () => {
     const [m] = (await listMissions(userA)).filter((x) => x.departmentCode === "fswd");
     expect(await setMissionDone(userA, m.id, true)).toBe(true);
-    await setMissionDone(userA, m.id, true); // repeat: must not double-award
+    await setMissionDone(userA, m.id, true); // repeat: harmless
     let fswd = (await listDepartments(userA)).find((d) => d.code === "fswd")!;
-    expect(fswd.xp).toBe(m.xpReward);
+    expect(fswd.xp).toBe(0); // only a reviewer-confirmed pass awards XP
 
     await setMissionDone(userA, m.id, false);
     await setMissionDone(userA, m.id, false);
@@ -83,7 +83,7 @@ describe("XP and levels (server side, idempotent)", () => {
     expect(fswd.level).toBe(0);
   });
 
-  it("raises the level at 300 XP", async () => {
+  it("self-made tasks earn no XP whatever the form sends, so they cannot be farmed (SEC-05)", async () => {
     const custom = [];
     for (let i = 0; i < 6; i++) {
       custom.push(await createCustomMission(userA, {
@@ -93,11 +93,10 @@ describe("XP and levels (server side, idempotent)", () => {
     }
     for (const c of custom) await setMissionDone(userA, c.id, true);
     const uxui = (await listDepartments(userA)).find((d) => d.code === "uxui")!;
-    expect(uxui.xp).toBe(300);
-    expect(uxui.level).toBe(1);
-    expect(levelProgress(uxui.xp).pct).toBe(0);
-    expect(await getTotalXp(userA)).toBe(300);
-    for (const c of custom) await deleteMission(userA, c.id); // deleting revokes XP
+    expect(uxui.xp).toBe(0);
+    expect(uxui.level).toBe(0);
+    expect(await getTotalXp(userA)).toBe(0);
+    for (const c of custom) await deleteMission(userA, c.id);
     expect((await listDepartments(userA)).find((d) => d.code === "uxui")!.xp).toBe(0);
   });
 

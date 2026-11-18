@@ -21,6 +21,8 @@ const off: Done = { ok: false, error: "Personalised learning is not available ye
 export async function saveOnboardingAction(input: OnboardingInput): Promise<Done> {
   const user = await guard();
   if (!user) return off;
+  // Server-side rule, not just a UI rule: onboarding enrols exactly one initial course.
+  if (!Array.isArray(input?.goals) || input.goals.length !== 1) return { ok: false, error: "Choose one course to start with. You can add more courses later." };
   const r = await saveOnboarding(user.id, input);
   revalidatePath("/onboarding");
   return r.ok ? { ok: true } : { ok: false, error: r.error };
