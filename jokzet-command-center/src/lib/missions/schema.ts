@@ -11,6 +11,7 @@ const noSecrets = (value: string, ctx: z.RefinementCtx) => {
 
 const departmentCodes = DEPARTMENTS.map((d) => d.code) as [string, ...string[]];
 
+export const MAX_CUSTOM_MISSIONS = 200; // self-made board tasks per learner
 export const MAX_CUSTOM_XP = 50; // Base44 let the client set any XP; the server now caps self-made missions.
 
 export const createMissionSchema = z.object({

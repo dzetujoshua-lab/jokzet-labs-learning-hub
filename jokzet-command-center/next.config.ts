@@ -41,6 +41,7 @@ const publicHost = (() => {
 })();
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false, // do not advertise the framework on every response
   // A self-contained server folder (.next/standalone) for hosts that run plain Node, such as cPanel. Off by default so the Netlify build is unchanged.
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   ...(publicHost ? { experimental: { serverActions: { allowedOrigins: [publicHost] } } } : {}),

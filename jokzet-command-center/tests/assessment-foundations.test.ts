@@ -102,7 +102,7 @@ describe("curriculum validators (pure)", () => {
 });
 
 describe("assessments record who scored them and what they were scored against", () => {
-  it("keeps today's behaviour (XP, skills, pass) but marks the result as self-assessed with a rubric snapshot", async () => {
+  it("passes the mission but awards no official XP or skills, and marks the result as self-assessed with a rubric snapshot", async () => {
     await startMission(userId, CODE);
     const lm = await db.learnerMission.findFirstOrThrow({ where: { userId, mission: { code: CODE } }, include: { mission: { include: { rubric: { include: { criteria: { orderBy: { position: "asc" } } } } } } } });
     const ev = await createEvidence(userId, { title: "Proof", departmentCode: "fswd", kind: "Link", description: "", linkUrl: "https://github.com/jokzet/work", capturedDate: "2026-11-16" }, undefined, lm.id);
@@ -114,8 +114,8 @@ describe("assessments record who scored them and what they were scored against",
     rubricVersionAtAssessment = lm.mission.rubric!.version;
 
     const result = await assessSubmission(userId, submission.id, { scores: criteria.map((c) => ({ criterionId: c.id, points: c.maxPoints })) });
-    expect(result).toMatchObject({ ok: true, outcome: "PASS", percentage: 100, xpAwarded: 40 }); // unchanged legacy result
-    expect(await getTotalXp(userId)).toBe(40);
+    expect(result).toMatchObject({ ok: true, outcome: "PASS", percentage: 100, xpAwarded: 0 }); // formative pass; official credit comes from a reviewer
+    expect(await getTotalXp(userId)).toBe(0);
 
     const assessment = await db.assessment.findUniqueOrThrow({ where: { submissionId: submission.id }, include: { scores: true } });
     assessmentId = assessment.id;
@@ -126,9 +126,7 @@ describe("assessments record who scored them and what they were scored against",
       expect(score).toMatchObject({ criterionName: c.name, maxPoints: c.maxPoints });
     }
 
-    const skills = await db.userSkill.findMany({ where: { userId } });
-    expect(skills.length).toBeGreaterThan(0);
-    expect(skills.every((s) => s.tier === "SELF_ASSESSED")).toBe(true); // never VERIFIED without a reviewer
+    expect(await db.userSkill.count({ where: { userId } })).toBe(0); // no skills, not even self-assessed ones, without a reviewer
   });
 });
 

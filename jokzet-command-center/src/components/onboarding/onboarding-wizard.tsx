@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { sessionsPerDay } from "@/lib/plan/availability";
 import type { OnboardingState } from "@/lib/plan/onboarding";
 import type { PlanReview } from "@/lib/plan/review";
-import { DURATION_DAYS, DURATIONS, MAX_GOALS, type DurationKind } from "@/lib/plan/schema";
+import { DURATION_DAYS, DURATIONS, type DurationKind } from "@/lib/plan/schema";
 
 type Programme = { code: string; name: string; description: string; outcomes: string[]; lessons: number };
 
@@ -37,7 +37,7 @@ export function OnboardingWizard({ departments, state, today, review }: { depart
   const d = state.draft;
   const [step, setStep] = useState(state.status === "PLAN_REVIEW" && review ? REVIEW_STEP : d ? 4 : 0);
   const [experience, setExperience] = useState(d?.experience ?? "BEGINNER");
-  const [goals, setGoals] = useState<Goal[]>(d?.goals ?? []);
+  const [goals, setGoals] = useState<Goal[]>((d?.goals ?? []).slice(0, 1));
   const [sessionMinutes, setSessionMinutes] = useState(String(d?.sessionMinutes ?? 45));
   const [dailyStudyMinutes, setDailyStudyMinutes] = useState(String(d?.dailyStudyMinutes ?? 0));
   const [breakMinutes, setBreakMinutes] = useState(String(d?.breakMinutes ?? 0));
@@ -59,8 +59,8 @@ export function OnboardingWizard({ departments, state, today, review }: { depart
   const availabilityError = weekdays.length === 0 ? "Choose at least one study day." : Number(sessionMinutes) < 15 || Number(sessionMinutes) > 240 ? "A session must be between 15 and 240 minutes." : !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime) ? "Choose a start time." : "";
   const durationError = durationKind === "CUSTOM" && (days < 7 || days > 365) ? "Choose between 7 and 365 days." : "";
   const goalOf = (code: string) => goals.find((g) => g.departmentCode === code);
-  const toggleGoal = (code: string) =>
-    setGoals((gs) => (gs.some((g) => g.departmentCode === code) ? gs.filter((g) => g.departmentCode !== code) : gs.length >= MAX_GOALS ? gs : [...gs, { departmentCode: code, weight: 3, targetLevel: 1, note: "" }]));
+  // Onboarding enrols the learner in ONE initial course. More courses can be added later, on purpose, once learning has started.
+  const selectCourse = (code: string) => setGoals((gs) => [{ departmentCode: code, weight: 3, targetLevel: 1, note: gs.find((g) => g.departmentCode === code)?.note ?? "" }]);
   const patchGoal = (code: string, patch: Partial<Goal>) => setGoals((gs) => gs.map((g) => (g.departmentCode === code ? { ...g, ...patch } : g)));
   const toggleDay = (day: number) => setWeekdays((w) => (w.includes(day) ? w.filter((x) => x !== day) : [...w, day]));
 
@@ -112,10 +112,10 @@ export function OnboardingWizard({ departments, state, today, review }: { depart
 
         {step === 1 ? (
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">Choose one programme, or up to {MAX_GOALS} to learn together. A higher weight gets more of your time.</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <p className="text-xs text-muted-foreground">Choose your first course. You will get its syllabus and timetable automatically, and you can add more courses later when you are ready.</p>
+            <div role="radiogroup" aria-label="Your first course" className="grid gap-2 sm:grid-cols-2">
               {departments.map((x) => (
-                <button key={x.code} type="button" aria-pressed={!!goalOf(x.code)} onClick={() => toggleGoal(x.code)}
+                <button key={x.code} type="button" role="radio" aria-checked={!!goalOf(x.code)} onClick={() => selectCourse(x.code)}
                   className={`rounded-xl border px-4 py-3 text-left transition-colors ${goalOf(x.code) ? "border-primary/60 bg-primary/10" : "border-border hover:border-primary/40"}`}>
                   <span className="block text-sm text-foreground">{x.name}</span>
                   {x.description ? <span className="mt-0.5 block text-xs text-muted-foreground">{x.description}</span> : null}
@@ -124,16 +124,10 @@ export function OnboardingWizard({ departments, state, today, review }: { depart
                 </button>
               ))}
             </div>
-            {goals.length >= MAX_GOALS ? <p className="text-xs text-muted-foreground">You have chosen the most programmes you can study together ({MAX_GOALS}).</p> : null}
             {goals.map((g) => (
               <div key={g.departmentCode} className="rounded-xl border border-border p-4">
                 <p className="text-sm text-foreground">{nameOf(g.departmentCode)}</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <label className="text-xs text-muted-foreground">Weight (1 to 5)
-                    <select className={`${SELECT} mt-1`} value={g.weight} onChange={(e) => patchGoal(g.departmentCode, { weight: Number(e.target.value) })}>
-                      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </label>
+                <div className="mt-3 grid gap-3">
                   <label className="text-xs text-muted-foreground">Aim for level
                     <select className={`${SELECT} mt-1`} value={g.targetLevel} onChange={(e) => patchGoal(g.departmentCode, { targetLevel: Number(e.target.value) })}>
                       {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>Level {n}</option>)}

@@ -283,7 +283,7 @@ describe("baseline: placement only, never earned", () => {
     expect(await db.baselineAssessment.count({ where: { userId: other } })).toBe(0); // fswd was dropped and never attempted
   });
 
-  it("leaves ordinary lessons exactly as they were: they still earn XP and skills", async () => {
+  it("ordinary lessons still pass on a self-assessment, but official XP and skills now wait for a reviewer", async () => {
     await startMission(legacy, "FSWD-L0-01");
     const lm = await db.learnerMission.findFirstOrThrow({ where: { userId: legacy, mission: { code: "FSWD-L0-01" } } });
     const ev = await createEvidence(legacy, { title: "Proof", departmentCode: "fswd", kind: "Link", description: "", linkUrl: "https://github.com/jokzet/work", capturedDate: "2026-12-01" }, undefined, lm.id);
@@ -293,8 +293,8 @@ describe("baseline: placement only, never earned", () => {
     const criteria = await db.rubricCriterion.findMany({ where: { rubric: { mission: { code: "FSWD-L0-01" } } }, orderBy: { position: "asc" } });
     const r = await assessSubmission(legacy, submission.id, { scores: criteria.map((c) => ({ criterionId: c.id, points: c.maxPoints })) });
     expect(r).toMatchObject({ ok: true, outcome: "PASS" });
-    expect((r as { xpAwarded: number }).xpAwarded).toBeGreaterThan(0);
-    expect(await db.userSkill.count({ where: { userId: legacy } })).toBeGreaterThan(0);
+    expect((r as { xpAwarded: number }).xpAwarded).toBe(0);
+    expect(await db.userSkill.count({ where: { userId: legacy } })).toBe(0);
     expect((await getDashboardData(legacy)).assessmentsPassed).toBe(1);
   });
 });

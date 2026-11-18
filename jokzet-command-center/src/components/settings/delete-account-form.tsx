@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { deleteAccountAction, type DeleteAccountState } from "@/app/(app)/settings/delete-account-action";
+import { deleteAccountAction, type DeleteAccountState } from "@/app/(account)/settings/delete-account-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

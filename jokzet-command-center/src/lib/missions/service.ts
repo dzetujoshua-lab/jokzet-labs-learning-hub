@@ -118,7 +118,8 @@ export async function setMissionDone(userId: string, learnerMissionId: string, d
 
     const now = new Date();
     if (done) {
-      const award = lm.mission.xpReward;
+      // Self-reported progress only: ticking a task off never awards official XP (supervised-beta policy; SEC-05).
+      const award = 0;
       await tx.learnerMission.update({
         where: { id: lm.id },
         data: { status: "COMPLETED", completedAt: now, startedAt: lm.startedAt ?? now, xpAwarded: award },
@@ -167,7 +168,7 @@ export async function createCustomMission(userId: string, input: CreateMissionIn
         durationMinutes: data.minutes,
         kind: toEnum(data.kind) as never,
         evidenceType: toEnum(data.evidenceType) as never,
-        xpReward: data.xpReward,
+        xpReward: 0, // a self-made task is practice: it never earns XP, whatever the form sent (SEC-05)
         notes: data.notes || null,
         isPublished: false,
       },

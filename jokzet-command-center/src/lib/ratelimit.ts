@@ -118,5 +118,6 @@ export const LIMITS = {
   planMove: { limit: 60, windowSeconds: 60 * 60 }, // moving single sessions
   planChange: { limit: 30, windowSeconds: 60 * 60 }, // extend, change subjects, pause, resume
   onboardingSave: { limit: 60, windowSeconds: 60 * 60 }, // saving onboarding answers
+  customMissionUser: { limit: 30, windowSeconds: 60 * 60 }, // creating self-made board tasks
   activityCreateUser: { limit: 30, windowSeconds: 60 * 60 }, // creating personal activities and accepting challenges
 } as const satisfies Record<string, Limit>;

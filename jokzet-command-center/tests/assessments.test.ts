@@ -87,27 +87,27 @@ describe("assessment validation and authorization", () => {
   });
 });
 
-describe("pass: completes the mission, awards XP once, verifies evidence, records skills", () => {
-  it("a full-marks assessment passes and credits the mission's XP and skills", async () => {
+describe("pass: a self-assessed pass is formative; official XP, skills and verified evidence need a reviewer", () => {
+  it("a full-marks self-assessment passes the mission but awards no official credit", async () => {
     const sub = await db.submission.findFirstOrThrow({ where: { userId: userA, learnerMission: { mission: { code: "FSWD-L0-01" } }, status: "SUBMITTED" }, include: { learnerMission: { include: { mission: { include: { skills: true } } } } } });
     const criteria = await db.rubricCriterion.findMany({ where: { rubric: { mission: { code: "FSWD-L0-01" } } }, orderBy: { position: "asc" } });
     const xpBefore = await xpOf(userA, "fswd");
 
     const result = await assessSubmission(userA, sub.id, { scores: scoresOf(criteria, [25, 30, 20, 25]), feedback: "Clean work." });
-    expect(result).toMatchObject({ ok: true, outcome: "PASS", percentage: 100, totalPoints: 100, xpAwarded: 40 });
-    expect(await xpOf(userA, "fswd")).toBe(xpBefore + 40);
+    expect(result).toMatchObject({ ok: true, outcome: "PASS", percentage: 100, totalPoints: 100, xpAwarded: 0 });
+    expect(await xpOf(userA, "fswd")).toBe(xpBefore);
 
     const lm = await db.learnerMission.findUniqueOrThrow({ where: { id: sub.learnerMissionId } });
-    expect(lm).toMatchObject({ status: "PASSED", xpAwarded: 40 });
+    expect(lm).toMatchObject({ status: "PASSED", xpAwarded: 0 });
     expect((await db.submission.findUniqueOrThrow({ where: { id: sub.id } })).status).toBe("ASSESSED");
-    expect((await db.evidenceItem.findMany({ where: { submissionId: sub.id } })).every((e) => e.status === "VERIFIED")).toBe(true);
-    expect(await db.userSkill.count({ where: { userId: userA } })).toBe(sub.learnerMission.mission.skills.length);
+    expect((await db.evidenceItem.findMany({ where: { submissionId: sub.id } })).every((e) => e.status !== "VERIFIED")).toBe(true); // only a reviewer verifies evidence
+    expect(await db.userSkill.count({ where: { userId: userA } })).toBe(0);
     expect(await db.feedback.count({ where: { assessment: { submissionId: sub.id }, kind: "GENERAL" } })).toBe(1);
     expect(await db.feedback.count({ where: { assessment: { submissionId: sub.id }, kind: { in: ["CORRECTION", "REMEDIATION"] } } })).toBe(0); // a pass has none
 
     // Assessing again is refused and XP does not move.
     expect(await assessSubmission(userA, sub.id, { scores: scoresOf(criteria, [25, 30, 20, 25]) })).toMatchObject({ ok: false, error: expect.stringMatching(/already assessed/) });
-    expect(await xpOf(userA, "fswd")).toBe(xpBefore + 40);
+    expect(await xpOf(userA, "fswd")).toBe(xpBefore);
     // A passed mission cannot be un-done from the board.
     expect(await setMissionDone(userA, sub.learnerMissionId, false)).toBe(false);
     expect((await db.learnerMission.findUniqueOrThrow({ where: { id: sub.learnerMissionId } })).status).toBe("PASSED");
@@ -117,7 +117,7 @@ describe("pass: completes the mission, awards XP once, verifies evidence, record
     const { lm: lm0 } = await submitFor(userB, "FSWD-L0-02");
     // Ticking done awards XP, but the mission is SUBMITTED so reset to allow the legacy toggle first.
     await db.learnerMission.update({ where: { id: lm0.id }, data: { status: "NOT_STARTED" } });
-    await setMissionDone(userB, lm0.id, true); // +40 via the board
+    await setMissionDone(userB, lm0.id, true); // self-reported progress: no XP via the board
     const xp1 = await xpOf(userB, "fswd");
     await db.learnerMission.update({ where: { id: lm0.id }, data: { status: "SUBMITTED" } });
     const sub = await db.submission.findFirstOrThrow({ where: { learnerMissionId: lm0.id } });
@@ -175,8 +175,8 @@ describe("revise: corrections, remediation, weakness tracking and resubmission",
     const second = await db.submission.findFirstOrThrow({ where: { learnerMissionId: lm.id, attempt: 2 } });
     const criteria = await db.rubricCriterion.findMany({ where: { rubric: { mission: { code: "SEC-L0-01" } } }, orderBy: { position: "asc" } });
     const xpBefore = await xpOf(userA, "sec");
-    expect(await assessSubmission(userA, second.id, { scores: scoresOf(criteria, [28, 33, 14, 18]) })).toMatchObject({ ok: true, outcome: "PASS", xpAwarded: 40 });
-    expect(await xpOf(userA, "sec")).toBe(xpBefore + 40);
+    expect(await assessSubmission(userA, second.id, { scores: scoresOf(criteria, [28, 33, 14, 18]) })).toMatchObject({ ok: true, outcome: "PASS", xpAwarded: 0 });
+    expect(await xpOf(userA, "sec")).toBe(xpBefore);
     expect(await db.assessment.count({ where: { userId: userA, rubric: { mission: { code: "SEC-L0-01" } } } })).toBe(2); // full history kept
   });
 
