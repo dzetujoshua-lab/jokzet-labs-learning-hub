@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth/cookie";
 
 // /privacy-policy is public on purpose: anyone (including a reviewer who is not signed in) must be able to read it.
-const PUBLIC_PATHS = ["/login", "/register", "/privacy-policy"];
+const PUBLIC_PATHS = ["/login", "/register", "/privacy-policy", "/welcome"];
 
 /**
  * Optimistic check only: it looks for the cookie's presence to redirect early.
@@ -15,6 +15,8 @@ export function proxy(request: NextRequest) {
 
   // A stale cookie must not bounce users away from /login (that would loop), so signed-in
   // visitors are redirected from the login page itself after a real database check.
+  // A visitor with no session who opens the main address sees the public homepage; any other private page asks them to sign in.
+  if (!hasCookie && pathname === "/") return NextResponse.redirect(new URL("/welcome", request.url));
   if (!hasCookie && !isPublic) return NextResponse.redirect(new URL("/login", request.url));
   return NextResponse.next();
 }

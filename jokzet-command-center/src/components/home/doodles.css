@@ -1,0 +1,94 @@
+/*
+ * Bouncing background doodles. Pure CSS: only `transform` and `opacity` animate (compositor-friendly), nothing runs in
+ * JavaScript, nothing re-lays out the page. Each doodle sets its own size, position, speed, delay and bounce height through
+ * custom properties so no two move alike. Every keyframe set starts and ends in the same state, so the loop never jumps.
+ */
+.doodles {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  --glow: 56 132 255; /* electric blue, used only as a soft glow */
+}
+
+.doodle {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  opacity: var(--o);
+  --h: calc(var(--h-base) * 1.3); /* a clearly visible hop on large screens */
+  --w: calc(var(--w-base) * 1.2);
+  color: hsl(var(--foreground));
+  will-change: transform;
+  animation-duration: var(--d);
+  animation-delay: var(--delay); /* negative delays start each doodle part-way through, so they are never in step */
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+}
+.doodle svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.doodle.glow {
+  color: hsl(var(--primary));
+}
+.doodle.glow svg {
+  filter: drop-shadow(0 0 7px rgb(var(--glow) / 0.55)) drop-shadow(0 0 16px rgb(var(--glow) / 0.28));
+}
+.doodle.blue {
+  color: rgb(var(--glow));
+}
+.doodle.blue svg {
+  filter: drop-shadow(0 0 8px rgb(var(--glow) / 0.6));
+}
+
+/* A real bounce: fast fall, a small squash on landing, then a slower rise that starts and ends at rest. */
+@keyframes bounce-a {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1); animation-timing-function: cubic-bezier(0.33, 0, 0.67, 0); }
+  42% { transform: translate3d(0, var(--h), 0) rotate(var(--r)) scale(1, 1); animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1); }
+  48% { transform: translate3d(0, var(--h), 0) rotate(var(--r)) scale(1.1, 0.88); animation-timing-function: ease-out; }
+  58% { transform: translate3d(0, calc(var(--h) * 0.1), 0) rotate(calc(var(--r) * 0.4)) scale(0.97, 1.04); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1); }
+}
+/* Bounce while drifting sideways and back, with a lean in the direction of travel. */
+@keyframes bounce-b {
+  0% { transform: translate3d(0, 0, 0) rotate(calc(var(--r) * -0.5)) scale(1); }
+  25% { transform: translate3d(calc(var(--w) * 0.5), var(--h), 0) rotate(var(--r)) scale(1.06, 0.94); }
+  50% { transform: translate3d(var(--w), calc(var(--h) * 0.15), 0) rotate(calc(var(--r) * 0.3)) scale(0.97, 1.03); }
+  75% { transform: translate3d(calc(var(--w) * 0.5), var(--h), 0) rotate(calc(var(--r) * -1)) scale(1.06, 0.94); }
+  100% { transform: translate3d(0, 0, 0) rotate(calc(var(--r) * -0.5)) scale(1); }
+}
+/* A lazy, high hop with a full spin: for the larger, fainter doodles in the back. */
+@keyframes bounce-c {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  30% { transform: translate3d(calc(var(--w) * 0.4), var(--h), 0) rotate(calc(var(--r) * 0.5)) scale(1.04); }
+  45% { transform: translate3d(calc(var(--w) * 0.5), calc(var(--h) * 0.95), 0) rotate(var(--r)) scale(1.1, 0.9); }
+  70% { transform: translate3d(calc(var(--w) * 0.2), calc(var(--h) * 0.3), 0) rotate(calc(var(--r) * 0.4)) scale(0.98, 1.03); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+}
+/* Gentle pulse of opacity, layered on a few doodles through a second animation on the child. */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.doodle.a { animation-name: bounce-a; }
+.doodle.b { animation-name: bounce-b; }
+.doodle.c { animation-name: bounce-c; }
+.doodle.pulse svg { animation: breathe 5s ease-in-out infinite; animation-delay: var(--delay); }
+
+/* Phones: fewer doodles and a gentler bounce. */
+@media (max-width: 640px) {
+  .doodle.lg { display: none; }
+  .doodle { --h: calc(var(--h-base) * 0.55); --w: calc(var(--w-base) * 0.5); width: calc(var(--s) * 0.8); height: calc(var(--s) * 0.8); }
+}
+
+/* People who ask for less motion get the doodles standing still: no continuous movement at all. */
+@media (prefers-reduced-motion: reduce) {
+  .doodle, .doodle svg { animation: none !important; will-change: auto; }
+}
