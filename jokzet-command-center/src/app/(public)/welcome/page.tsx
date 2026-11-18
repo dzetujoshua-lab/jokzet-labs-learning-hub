@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { RedirectIfSignedIn } from "@/components/auth/redirect-if-signed-in";
 import { BrandLogo } from "@/components/brand-logo";
 import { BackgroundDoodles } from "@/components/home/background-doodles";
+import { RouteAtmosphere } from "@/components/home/route-atmosphere";
 import { LegalFooter } from "@/components/legal-footer";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default function WelcomePage() {
         <RedirectIfSignedIn />
       </Suspense>
       <BackgroundDoodles />
+      <RouteAtmosphere fixed="rich" />
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-5 py-8 sm:px-8">
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">

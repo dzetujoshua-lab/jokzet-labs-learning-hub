@@ -21,7 +21,13 @@ export type HomeCourse = {
   next: PlanItemView | null;
 };
 export type HomeDay = { date: string; label: string; isToday: boolean; sessions: PlanItemView[] };
+export type HomeContinue = { missionCode: string; title: string; course: string; reason: "IN_PROGRESS" | "NEEDS_REVISION" | "NEXT_SESSION" };
+export type HomeAssessmentRow = { id: string; kind: "AWAITING" | "REVISE" | "RESULT" | "CHECKPOINT"; title: string; detail: string; href: string };
 export type LearnerHome = {
+  continue: HomeContinue | null;
+  assessments: HomeAssessmentRow[];
+  weekly: { planned: number; done: number; plannedMinutes: number; doneMinutes: number; label: string };
+  focus: { working: string[]; confirmedSkills: number };
   displayName: string;
   today: string;
   timezone: string;
@@ -37,6 +43,10 @@ export type LearnerHome = {
   totals: { done: number; remaining: number; missed: number; percent: number };
   catchUps: number;
 };
+
+const stateLabel = (kind: string, status: string): string =>
+  status === "VERIFIED" ? "Confirmed by a reviewer" : status === "PENDING_REVIEW" ? "Waiting for a reviewer" : status === "REJECTED" ? "Not accepted by a reviewer" : kind === "AUTOMATED" ? "AI-assessed, not yet confirmed" : "Self-assessed";
+const mondayOf = (iso: string) => addDaysISO(iso, -((weekdayOf(iso) + 6) % 7));
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const weekdayOf = (iso: string) => new Date(`${iso}T00:00:00Z`).getUTCDay();
@@ -75,12 +85,52 @@ export async function getLearnerHome(userId: string, now: Date = new Date()): Pr
     };
   });
 
+  // What to do next: unfinished work first (a mission being revised, then one in progress), otherwise the next planned session.
+  const open = await db.learnerMission.findFirst({
+    where: { userId, status: { in: ["NEEDS_REVISION", "IN_PROGRESS"] }, mission: { code: { not: null }, category: "CURRICULUM_MISSION", isPublished: true } },
+    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+    select: { status: true, mission: { select: { code: true, title: true, department: { select: { name: true } } } } },
+  });
+  const cont: HomeContinue | null = open?.mission.code
+    ? { missionCode: open.mission.code, title: open.mission.title, course: open.mission.department.name, reason: open.status === "NEEDS_REVISION" ? "NEEDS_REVISION" : "IN_PROGRESS" }
+    : nextSession?.missionCode ? { missionCode: nextSession.missionCode, title: nextSession.title, course: nextSession.departmentCode ? (courses.find((c) => c.code === nextSession.departmentCode)?.name ?? "") : "", reason: "NEXT_SESSION" } : null;
+
+  // Assessments: what is waiting, what needs revising, the next checkpoint, and the last results with who scored them.
+  const [awaiting, revise, recent] = await Promise.all([
+    db.submission.findMany({ where: { userId, status: "SUBMITTED" }, orderBy: { submittedAt: "desc" }, take: 3, select: { id: true, attempt: true, learnerMission: { select: { mission: { select: { title: true } } } } } }),
+    db.learnerMission.findMany({ where: { userId, status: "NEEDS_REVISION", mission: { code: { not: null } } }, orderBy: { updatedAt: "desc" }, take: 3, select: { mission: { select: { code: true, title: true } } } }),
+    db.assessment.findMany({ where: { userId }, orderBy: { assessedAt: "desc" }, take: 3, select: { id: true, submissionId: true, percentage: true, outcome: true, status: true, assessorKind: true, weaknesses: true, submission: { select: { learnerMission: { select: { mission: { select: { title: true } } } } } } } }),
+  ]);
+  const checkpoint = planned.find((i) => i.kind === "CHECKPOINT");
+  const assessments: HomeAssessmentRow[] = [
+    ...awaiting.map((s) => ({ id: `w-${s.id}`, kind: "AWAITING" as const, title: s.learnerMission.mission.title, detail: "Submitted. Waiting to be scored.", href: `/assessments/${s.id}` })),
+    ...revise.map((m) => ({ id: `r-${m.mission.code}`, kind: "REVISE" as const, title: m.mission.title, detail: "Needs revision. Review the feedback and resubmit.", href: `/missions/${m.mission.code}` })),
+    ...(checkpoint ? [{ id: `c-${checkpoint.id}`, kind: "CHECKPOINT" as const, title: checkpoint.title, detail: `Checkpoint on ${checkpoint.date} at ${checkpoint.time}.`, href: checkpoint.missionCode ? `/missions/${checkpoint.missionCode}` : "/timetable" }] : []),
+    ...recent.map((a) => ({ id: `a-${a.id}`, kind: "RESULT" as const, title: a.submission.learnerMission.mission.title, detail: `${a.percentage}% · ${a.outcome === "PASS" ? "pass" : "needs work"} · ${stateLabel(a.assessorKind, a.status)}`, href: `/assessments/${a.submissionId}` })),
+  ];
+  // Where the learner is struggling (tags from their latest assessments) and how many skills a reviewer has actually confirmed.
+  const tally = new Map<string, number>();
+  for (const a of recent) for (const w of a.weaknesses) tally.set(w, (tally.get(w) ?? 0) + 1);
+  const working = [...tally].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([w]) => w);
+  const confirmedSkills = await db.userSkill.count({ where: { userId, tier: "VERIFIED" } });
+
+  // This week (Monday to Sunday, in the learner's time zone): planned sessions and the ones actually done.
+  const weekStart = mondayOf(today);
+  const weekEnd = addDaysISO(weekStart, 6);
+  const thisWeek = live.filter((i) => i.date >= weekStart && i.date <= weekEnd);
+  const weekly = {
+    planned: thisWeek.length, done: thisWeek.filter((i) => i.done).length,
+    plannedMinutes: thisWeek.reduce((n, i) => n + i.minutes, 0), doneMinutes: thisWeek.filter((i) => i.done).reduce((n, i) => n + i.minutes, 0),
+    label: `${weekStart} to ${weekEnd}`,
+  };
+
   const done = live.filter((i) => i.done).length;
   const missed = live.filter((i) => i.status === "MISSED" && !i.done).length;
   const remaining = planned.length;
   const total = done + missed + remaining;
 
   return {
+    continue: cont, assessments, weekly, focus: { working, confirmedSkills },
     displayName: profile.displayName, today, timezone: view.timezone, planPaused: view.status === "PAUSED", planEnds: view.endDate, todaySessions,
     minutesToday: todaySessions.reduce((n, i) => n + i.minutes, 0), nextSession, upcoming, week, courses,
     courseNames: Object.fromEntries(courses.map((c) => [c.code, c.name])),

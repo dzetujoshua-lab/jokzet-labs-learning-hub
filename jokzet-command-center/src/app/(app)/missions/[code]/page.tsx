@@ -135,7 +135,7 @@ export default async function MissionDetailPage({ params }: PageProps<"/missions
         <aside className="space-y-5">
           {schedule ? <MissionSchedulePanel schedule={schedule} /> : null}
           {watch.length ? (
-            <WatchPanel resources={watch} />
+            <WatchPanel resources={watch} heading="Watch · prepare for the assessment" />
           ) : (
             <section className="panel p-5">
               <p className="mono-label">Watch · learn it first</p>

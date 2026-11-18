@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { BackgroundDoodles } from "@/components/home/background-doodles";
+import { RouteAtmosphere } from "@/components/home/route-atmosphere";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { requireUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
@@ -31,6 +33,9 @@ export default async function OnboardingPage() {
   const status = (state.status === "PLAN_REVIEW" && !review) || state.status === "PLAN_GENERATING" ? "IN_PROGRESS" : state.status;
 
   return (
+    <>
+    <BackgroundDoodles behind />
+    <RouteAtmosphere fixed="low" />
     <main className="mx-auto w-full max-w-2xl px-4 py-10 md:py-16">
       <p className="mono-label">JOKZET Labs</p>
       <h1 className="mt-3 font-display text-[28px] font-medium leading-tight tracking-tight text-foreground md:text-[36px]">Build your programme</h1>
@@ -46,5 +51,6 @@ export default async function OnboardingPage() {
         />
       </div>
     </main>
+    </>
   );
 }

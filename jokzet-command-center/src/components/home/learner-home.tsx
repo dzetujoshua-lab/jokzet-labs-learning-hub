@@ -51,6 +51,19 @@ export function LearnerHomeView({ home }: { home: LearnerHome }) {
         </p>
       </header>
 
+      {home.continue ? (
+        <Link href={`/missions/${home.continue.missionCode}`} className="panel flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:border-primary/50" aria-label={`Continue: ${home.continue.title}`}>
+          <div className="min-w-0">
+            <p className="mono-label">{home.continue.reason === "NEEDS_REVISION" ? "Revise and resubmit" : home.continue.reason === "IN_PROGRESS" ? "Continue learning" : "Start next"}</p>
+            <p className="mt-2 text-base text-foreground">{home.continue.title}</p>
+            {home.continue.course ? <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{home.continue.course}</p> : null}
+          </div>
+          <span className="inline-flex h-9 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground">
+            {home.continue.reason === "NEEDS_REVISION" ? "Open feedback" : home.continue.reason === "IN_PROGRESS" ? "Continue" : "Open"}
+          </span>
+        </Link>
+      ) : null}
+
       <section aria-labelledby="today-h" className="panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 id="today-h" className="mono-label">Today</h2>
@@ -80,6 +93,42 @@ export function LearnerHomeView({ home }: { home: LearnerHome }) {
           ))}
         </div>
       </section>
+
+      <div className="grid gap-3.5 md:grid-cols-2">
+        <section aria-labelledby="goal-h" className="panel p-5">
+          <h2 id="goal-h" className="mono-label">This week</h2>
+          {home.weekly.planned ? (
+            <>
+              <p className="mt-3 text-sm text-foreground">{home.weekly.done} of {home.weekly.planned} sessions done</p>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={Math.round((home.weekly.done / home.weekly.planned) * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Sessions done this week">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round((home.weekly.done / home.weekly.planned) * 100)}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Planned {hours(home.weekly.plannedMinutes)} · done {hours(home.weekly.doneMinutes)}. Planned time is what your timetable allows; done time counts only finished sessions.</p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">No sessions are planned this week.</p>
+          )}
+        </section>
+
+        <section aria-labelledby="assess-h" className="panel p-5">
+          <h2 id="assess-h" className="mono-label">Assessments</h2>
+          {home.assessments.length ? (
+            <ul className="mt-3 space-y-2">
+              {home.assessments.map((a) => (
+                <li key={a.id}>
+                  <Link href={a.href} className="block rounded-xl border border-border px-3.5 py-2.5 transition-colors hover:border-primary/50">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{a.kind === "AWAITING" ? "Waiting" : a.kind === "REVISE" ? "Revise" : a.kind === "CHECKPOINT" ? "Next checkpoint" : "Result"}</p>
+                    <p className="mt-1 text-sm text-foreground">{a.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{a.detail}</p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">No assessments yet. When you finish a mission, submit your evidence to be scored against its rubric.</p>
+          )}
+        </section>
+      </div>
 
       <section aria-labelledby="courses-h">
         <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -113,6 +162,20 @@ export function LearnerHomeView({ home }: { home: LearnerHome }) {
           </div>
         </section>
       ) : null}
+
+      <section aria-labelledby="focus-h" className="panel p-5">
+        <h2 id="focus-h" className="mono-label">Skills</h2>
+        {home.focus.working.length ? (
+          <p className="mt-3 text-sm text-foreground">Areas to work on, from your latest assessments: <span className="text-muted-foreground">{home.focus.working.join(", ")}</span>.</p>
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">Your assessments will show the skills to work on once you have a result.</p>
+        )}
+        <p className="mt-2 text-xs text-muted-foreground">
+          {home.focus.confirmedSkills
+            ? `${home.focus.confirmedSkills} skill${home.focus.confirmedSkills === 1 ? "" : "s"} confirmed by a reviewer.`
+            : "No skills confirmed by a reviewer yet. Self-assessed and AI results are feedback; a reviewer's confirmation is what counts."}
+        </p>
+      </section>
 
       <section aria-label="Overall progress" className="panel p-5">
         <p className="mono-label">Overall progress</p>

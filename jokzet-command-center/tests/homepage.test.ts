@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
 import { SESSION_COOKIE } from "@/lib/auth/cookie";
+import { atmosphereFor } from "@/lib/atmosphere";
 
 const read = (p: string) => readFileSync(path.resolve(import.meta.dirname, "..", p), "utf8");
 const css = read("src/components/home/doodles.css");
@@ -63,8 +64,20 @@ describe("bouncing doodle background", () => {
   });
 
   it("only animates transform and opacity, and runs no script", () => {
-    const keyframes = css.match(/@keyframes[\s\S]*?\n\}\n/g)!.join("\n");
-    expect(keyframes).not.toMatch(/\b(left|top|width|height|margin|box-shadow|filter)\s*:/);
+    // Every @keyframes block, found by matching braces (some are written on one line).
+    const blocks: string[] = [];
+    for (let i = css.indexOf("@keyframes"); i !== -1; i = css.indexOf("@keyframes", i + 1)) {
+      let depth = 0;
+      let j = css.indexOf("{", i);
+      const begin = j;
+      for (; j < css.length; j += 1) {
+        if (css[j] === "{") depth += 1;
+        if (css[j] === "}" && --depth === 0) break;
+      }
+      blocks.push(css.slice(begin, j + 1));
+    }
+    expect(blocks.length).toBeGreaterThanOrEqual(9);
+    expect(blocks.join("\n")).not.toMatch(/\b(left|top|width|height|margin|box-shadow|filter)\s*:/);
     expect(tsx).not.toContain("use client");
     expect(tsx).not.toMatch(/useEffect|requestAnimationFrame|setInterval|addEventListener/);
   });
@@ -76,6 +89,48 @@ describe("bouncing doodle background", () => {
   });
 
   it("is decorative: hidden from assistive technology and never catches clicks", () => {
+    expect(tsx).toContain('aria-hidden="true"');
+    expect(css).toMatch(/\.doodles \{[^}]*pointer-events: none/);
+  });
+});
+
+describe("shared animation system", () => {
+  it("gives each part of the product the right amount of motion", () => {
+    expect(atmosphereFor("/welcome")).toBe("rich");
+    for (const p of ["/", "/login", "/register"]) expect(atmosphereFor(p), p).toBe("medium");
+    for (const p of ["/departments", "/departments/fswd", "/courses", "/missions", "/missions/FSWD-L0-01", "/timetable", "/portfolio", "/onboarding"]) expect(atmosphereFor(p), p).toBe("low");
+    for (const p of ["/assessments", "/assessments/abc", "/review", "/review/xyz", "/evidence", "/settings", "/privacy"]) expect(atmosphereFor(p), p).toBe("minimal");
+  });
+
+  it("has an intensity for each level: fewer doodles, smaller bounce, fainter, and the busiest effects only on the richest", () => {
+    for (const level of ["rich", "medium", "low", "minimal"]) expect(css, level).toContain(`data-atmosphere="${level}"`);
+    expect(css).toMatch(/data-atmosphere="minimal"\] \.doodle\.t1[\s\S]*?display: none/);
+    expect(css).toMatch(/data-atmosphere="medium"\] \.doodle\.t3 \{ display: none/);
+    expect(css).toMatch(/data-atmosphere="minimal"\] \.doodles \{ --amp: 0\.35; --fade: 0\.35/);
+    expect(css).toMatch(/data-atmosphere="medium"\] \.particle/); // particles are for the richest pages only
+    expect(tsx).toMatch(/const tierOf/);
+  });
+
+  it("is used by the public homepage, the sign-in pages, onboarding and every signed-in page, from one component", () => {
+    expect(read("src/app/(public)/welcome/page.tsx")).toContain('fixed="rich"');
+    expect(read("src/app/(auth)/layout.tsx")).toContain('fixed="medium"');
+    expect(read("src/app/onboarding/page.tsx")).toContain('fixed="low"');
+    const frame = read("src/components/layout/app-frame.tsx");
+    expect(frame).toContain("<BackgroundDoodles behind />");
+    expect(frame).toContain("<RouteAtmosphere />");
+  });
+
+  it("enters each page gently without hiding it, and turns every continuous effect off for reduced motion", () => {
+    expect(read("src/app/(app)/template.tsx")).toContain("page-enter");
+    expect(read("src/app/(account)/template.tsx")).toContain("page-enter");
+    expect(css).toMatch(/\.page-enter \{ animation: page-enter 240ms ease-out both; \}/);
+    expect(css).toMatch(/@keyframes page-enter \{ from \{ opacity: 0\.001/); // almost invisible for a few milliseconds, always ends fully visible
+    const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"));
+    for (const selector of [".atmos::before", ".particle", ".page-enter", ".reveal"]) expect(reduced, selector).toContain(selector);
+  });
+
+  it("keeps the background out of the way: no pointer events, hidden from assistive technology, behind content", () => {
+    expect(css).toMatch(/\.doodles\.behind \{ z-index: -1/);
     expect(tsx).toContain('aria-hidden="true"');
     expect(css).toMatch(/\.doodles \{[^}]*pointer-events: none/);
   });

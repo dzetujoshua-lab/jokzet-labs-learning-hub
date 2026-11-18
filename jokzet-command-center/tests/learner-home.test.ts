@@ -1,6 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { assessSubmission } from "@/lib/assessments/service";
 import { registerUser } from "@/lib/auth/service";
+import { createEvidence } from "@/lib/evidence/service";
+import { startMission, submitMission } from "@/lib/missions/progress";
 import { db } from "@/lib/db";
 import { getLearnerHome } from "@/lib/plan/home";
 import { buildPlanForReview, confirmPlan, saveOnboarding } from "@/lib/plan/onboarding";
@@ -125,5 +128,57 @@ describe("the personalised learner home", () => {
     const home = (await getLearnerHome(b, at("2026-12-20")))!;
     expect(home.courses[0].missed).toBe(1);
     expect(home.totals.missed).toBe(1);
+  });
+});
+
+describe("the home's next action, assessments, weekly goal and skills", () => {
+  it("suggests the next planned session when nothing is in progress", async () => {
+    const home = (await getLearnerHome(b, at("2026-12-07")))!;
+    expect(home.continue?.reason).toBe("NEXT_SESSION");
+    expect(home.continue?.missionCode).toBeTruthy();
+    expect(home.assessments.filter((x) => x.kind === "AWAITING" || x.kind === "REVISE" || x.kind === "RESULT")).toHaveLength(0);
+    expect(home.focus).toEqual({ working: [], confirmedSkills: 0 });
+  });
+
+  it("follows a real submission: in progress, then waiting to be scored, then needing revision with the result and who scored it", async () => {
+    await startMission(b, "PHOTO-L0-01");
+    expect((await getLearnerHome(b, at("2026-12-07")))!.continue).toMatchObject({ missionCode: "PHOTO-L0-01", reason: "IN_PROGRESS" });
+
+    const lm = await db.learnerMission.findFirstOrThrow({ where: { userId: b, mission: { code: "PHOTO-L0-01" } } });
+    expect((await createEvidence(b, { title: "Proof", departmentCode: "photo", kind: "Link", description: "", linkUrl: "https://github.com/jokzet/work", capturedDate: "2026-12-01" }, undefined, lm.id)).ok).toBe(true);
+    expect((await submitMission(b, lm.id, { explanation: "I shot the series, edited it and wrote notes on each decision.", githubUrl: "", liveUrl: "" })).ok).toBe(true);
+    const waiting = (await getLearnerHome(b, at("2026-12-07")))!;
+    expect(waiting.assessments.some((x) => x.kind === "AWAITING" && x.href.startsWith("/assessments/"))).toBe(true);
+
+    const submission = await db.submission.findFirstOrThrow({ where: { learnerMissionId: lm.id } });
+    const criteria = await db.rubricCriterion.findMany({ where: { rubric: { mission: { code: "PHOTO-L0-01" } } }, orderBy: { position: "asc" } });
+    const done = await assessSubmission(b, submission.id, { scores: criteria.map((c, i) => ({ criterionId: c.id, points: i === 0 ? 0 : c.maxPoints })) });
+    expect(done.ok).toBe(true);
+
+    const after = (await getLearnerHome(b, at("2026-12-07")))!;
+    const result = after.assessments.find((x) => x.kind === "RESULT")!;
+    expect(result.detail).toMatch(/Self-assessed/);
+    expect(result.href).toBe(`/assessments/${submission.id}`);
+    expect(after.focus.working.length).toBeGreaterThan(0); // the criterion that scored 0
+    expect(after.focus.confirmedSkills).toBe(0); // nothing is "confirmed" without a reviewer
+    if (done.ok && done.outcome !== "PASS") {
+      expect(after.continue).toMatchObject({ reason: "NEEDS_REVISION", missionCode: "PHOTO-L0-01" });
+      expect(after.assessments.some((x) => x.kind === "REVISE")).toBe(true);
+    }
+  });
+
+  it("never shows one learner's assessments to another", async () => {
+    const mine = (await getLearnerHome(a, at("2026-12-07")))!;
+    expect(mine.assessments.filter((x) => x.kind === "RESULT" || x.kind === "AWAITING")).toHaveLength(0);
+    expect(mine.focus.working).toEqual([]);
+  });
+
+  it("counts this week's sessions from the plan (Monday to Sunday), planned versus done", async () => {
+    const home = (await getLearnerHome(a, at("2026-12-09")))!; // Wednesday
+    expect(home.weekly.label).toBe("2026-12-07 to 2026-12-13");
+    expect(home.weekly.planned).toBeGreaterThan(0);
+    expect(home.weekly.done).toBe(0);
+    expect(home.weekly.plannedMinutes).toBeGreaterThan(0);
+    expect(home.weekly.doneMinutes).toBe(0);
   });
 });

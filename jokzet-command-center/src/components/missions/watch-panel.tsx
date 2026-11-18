@@ -20,7 +20,7 @@ const PROVIDER_LABEL: Record<string, string> = {
  * the video provider loads before that, and only its privacy-enhanced host is ever used); every resource also has an
  * external link as a fallback. Interactions are recorded as advisory hints and never affect progress or credit.
  */
-export function WatchPanel({ resources }: { resources: WatchResourceView[] }) {
+export function WatchPanel({ resources, heading = "Watch · learn it first" }: { resources: WatchResourceView[]; heading?: string }) {
   const [playing, setPlaying] = useState<Set<string>>(new Set());
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>(() => Object.fromEntries(resources.map((r) => [r.id, r.bookmarked])));
 
@@ -31,7 +31,7 @@ export function WatchPanel({ resources }: { resources: WatchResourceView[] }) {
 
   return (
     <section className="panel p-5" aria-labelledby="watch-heading">
-      <p id="watch-heading" className="mono-label">Watch · learn it first</p>
+      <p id="watch-heading" className="mono-label">{heading}</p>
       <ul className="mt-3 space-y-5">
         {resources.map((r) => {
           const canEmbed = !!r.embedUrl && isAllowedEmbedUrl(r.embedUrl);
@@ -43,7 +43,7 @@ export function WatchPanel({ resources }: { resources: WatchResourceView[] }) {
                 <div className="min-w-0">
                   <p className="text-[13px] text-foreground">{r.title}</p>
                   <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                    {r.role === "PRIMARY" ? "Start here · " : ""}{KIND_LABEL[r.kind] ?? r.kind}
+                    {r.role === "PRIMARY" ? "Start here · " : "Optional · "}{KIND_LABEL[r.kind] ?? r.kind}
                     {r.durationMinutes ? ` · ${r.durationMinutes} min` : ""} · {PROVIDER_LABEL[r.provider] ?? r.provider}
                   </p>
                 </div>

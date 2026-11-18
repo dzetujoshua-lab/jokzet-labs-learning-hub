@@ -7,6 +7,7 @@ import { ClaimButton } from "@/components/reviews/review-controls";
 import { Button } from "@/components/ui/button";
 import { requireRole } from "@/lib/auth/dal";
 import { fmtDate, metaFor } from "@/lib/programme";
+import { listContentGaps } from "@/lib/resources/gaps";
 import { listQueue } from "@/lib/reviews/service";
 
 export const metadata: Metadata = { title: "Review queue" };
@@ -16,6 +17,8 @@ export default async function ReviewQueuePage() {
   const queue = await listQueue({ id: user.id, role: user.role, displayName: user.displayName });
   const mine = queue.filter((q) => q.mine);
   const open = queue.filter((q) => !q.mine);
+  // Administrators also see which published missions still have no approved learning video or guide.
+  const gaps = user.role === "ADMIN" ? await listContentGaps() : [];
 
   const row = (q: (typeof queue)[number]) => {
     const meta = metaFor(q.departmentCode);
@@ -61,6 +64,27 @@ export default async function ReviewQueuePage() {
         </section>
       ) : mine.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="Nothing to review" hint="When a learner in your departments asks for a review, it will appear here." />
+      ) : null}
+      {user.role === "ADMIN" ? (
+        <section className="panel overflow-hidden" aria-labelledby="gaps-h">
+          <div className="border-b border-border px-5 py-4">
+            <p id="gaps-h" className="mono-label">Content gaps · {gaps.length}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">Published missions with no approved video or guide. Learners see a plain &ldquo;not yet available&rdquo; notice for these; nothing is substituted.</p>
+          </div>
+          {gaps.length ? (
+            <ul>
+              {gaps.map((g) => (
+                <li key={g.code} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-5 py-3 last:border-0">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em]" style={{ color: metaFor(g.departmentCode).color }}>{g.code}</span>
+                  <span className="min-w-0 flex-1 text-sm text-foreground">{g.title}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{g.departmentName}{g.hasSupplementary ? " · optional material only" : ""}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-5 py-4 text-sm text-muted-foreground">Every published lesson and checkpoint has an approved primary resource.</p>
+          )}
+        </section>
       ) : null}
     </div>
   );
