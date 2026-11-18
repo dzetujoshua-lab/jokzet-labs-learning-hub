@@ -13,6 +13,8 @@ import { requireUser } from "@/lib/auth/dal";
 import { getReviewState } from "@/lib/reviews/service";
 import { AiAssessmentPanel } from "@/components/assessments/ai-assessment-panel";
 import { getAiJobView } from "@/lib/ai/view";
+import { PreparePanel } from "@/components/assessments/prepare-panel";
+import { getMissionWatch } from "@/lib/resources/service";
 import { fmtDate, metaFor, toLabel } from "@/lib/programme";
 
 export const metadata: Metadata = { title: "Assessment" };
@@ -29,6 +31,9 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
   const assessed = submission.status === "ASSESSED" && submission.assessment;
   const reviewState = assessed ? await getReviewState(user.id, submission.assessment!.id) : null;
   const aiView = await getAiJobView(user.id, submission.id); // owner-scoped; null when the AI assessor was not involved
+  // The mission's approved resources (owner-scoped engagement state), shown before an attempt and again for review and resubmission.
+  const prep = await getMissionWatch(user.id, mission.id);
+  const needsRevision = !!assessed && submission.assessment!.outcome !== "PASS";
 
   return (
     <div className="space-y-6">
@@ -61,6 +66,7 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {aiView ? <AiAssessmentPanel view={aiView} /> : null}
+          {!assessed ? <PreparePanel resources={prep} /> : null}
           {reviewState ? <ReviewStatus state={reviewState} canAsk /> : null}
           {assessed ? (
             <AssessmentResult assessment={submission.assessment!} />
@@ -76,6 +82,7 @@ export default async function AssessmentDetailPage({ params }: PageProps<"/asses
         </div>
 
         <aside className="space-y-5">
+          {assessed ? <PreparePanel resources={prep} retry={needsRevision} weakCriteria={needsRevision ? submission.assessment!.weaknesses : []} /> : null}
           <section className="panel p-5">
             <p className="mono-label">Submitted work</p>
             {submission.explanation ? <p className="mt-3 text-[13px] leading-relaxed text-foreground">{submission.explanation}</p> : null}
