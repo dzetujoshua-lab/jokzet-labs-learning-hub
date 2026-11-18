@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { processAssessmentJob } from "@/lib/ai/jobs";
 import { z } from "zod";
 import { requireOnboardedUser as requireUser } from "@/lib/auth/dal";
 import { setCorrectionResolved, assessSubmission, type AssessResult } from "@/lib/assessments/service";
@@ -107,8 +109,13 @@ export async function submitMissionAction(learnerMissionId: string, _prev: Workf
     liveUrl: String(formData.get("liveUrl") ?? ""),
   });
   if (!result.ok) return { error: result.error };
+  // Start the AI assessment after the response has gone back, so the page never waits on the provider.
+  if (result.aiJobId) {
+    const jobId = result.aiJobId;
+    after(() => processAssessmentJob(jobId).then(() => undefined, () => undefined));
+  }
   refresh();
-  return { ok: true, message: `Attempt ${result.attempt} submitted` };
+  return { ok: true, message: result.aiJobId ? `Attempt ${result.attempt} submitted. Your work is being assessed.` : `Attempt ${result.attempt} submitted` };
 }
 
 // ── Imported schedule, daily missions, reminders ──

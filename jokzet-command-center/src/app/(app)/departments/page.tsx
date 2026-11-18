@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { DepartmentCard } from "@/components/dashboard/department-card";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/dal";
@@ -25,10 +26,14 @@ export default async function DepartmentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Nine departments"
+        eyebrow={departments.length === 1 ? "Your course" : "Your courses"}
         title="Skill progression"
-        description="Each department runs on the same rule: 300 XP per level, earned only by finishing practical missions."
-      />
+        description="The courses you are taking. Each runs on the same rule: 300 XP per level, earned only by finishing practical missions that a reviewer has confirmed."
+      >
+        <Link href="/courses" className="rounded-full border border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground">
+          Explore courses
+        </Link>
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {tiles.map((tile) => (

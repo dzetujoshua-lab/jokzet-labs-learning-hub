@@ -47,6 +47,12 @@ export async function assessSubmission(userId: string, submissionId: string, inp
       },
     });
     if (!submission) return { ok: false as const, error: "Submission not found." };
+    const job = await tx.assessmentJob.findUnique({ where: { submissionId }, select: { status: true, assessmentId: true } });
+    // While the AI assessor owns a submission the learner cannot also score it. Once it has handed the work to a human (or could
+    // not assess it), self-assessment is available again and is labelled as self-assessment.
+    if (job && !job.assessmentId && ["QUEUED", "REVIEWING_EVIDENCE", "AI_IN_PROGRESS", "RETRY_PENDING"].includes(job.status)) {
+      return { ok: false as const, error: "Your work is being assessed. The result will appear here when it is ready." };
+    }
     if (submission.status !== "SUBMITTED") return { ok: false as const, error: submission.status === "ASSESSED" ? "This submission was already assessed." : "Submit the mission before assessing it." };
     if (submission.evidence.length === 0 && !submission.githubUrl && !submission.liveUrl) {
       return { ok: false as const, error: "Only submitted evidence can be assessed. This submission has none." };

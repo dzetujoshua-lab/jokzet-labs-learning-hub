@@ -9,6 +9,7 @@ import type { ReviewState } from "@/lib/reviews/service";
 
 const LABEL: Record<ReviewState["status"], string> = {
   SELF_RECORDED: "Self-assessed",
+  AI_ASSESSED: "AI-assessed, not yet confirmed",
   PENDING_REVIEW: "Waiting for a reviewer",
   VERIFIED: "Verified by a reviewer",
   NEEDS_REVISION: "Reviewed: needs revision",
@@ -45,6 +46,12 @@ export function ReviewStatus({ state, canAsk }: { state: ReviewState; canAsk: bo
         <span className="rounded-full border border-border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{LABEL[state.status]}</span>
       </div>
 
+      {state.status === "AI_ASSESSED" ? (
+        <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
+          This score was given by the Academy&apos;s AI assessor. It is not yet confirmed by a person, so it does not award official XP or skills. Ask a reviewer to confirm it and it becomes a verified result.
+        </p>
+      ) : null}
+
       {state.status === "SELF_RECORDED" ? (
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
           This result is your own assessment. Ask a reviewer to verify it and it becomes a verified result. The reviewer will see this submission and its evidence.
@@ -66,7 +73,7 @@ export function ReviewStatus({ state, canAsk }: { state: ReviewState; canAsk: bo
         </div>
       ) : null}
 
-      {canAsk && state.status === "SELF_RECORDED" ? (
+      {canAsk && (state.status === "SELF_RECORDED" || state.status === "AI_ASSESSED") ? (
         <Button className="mt-4" size="sm" disabled={pending} onClick={() => run(() => requestReviewAction(state.assessmentId), "Review requested")}>
           {pending ? "Requesting…" : "Request review"}
         </Button>

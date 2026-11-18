@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { enqueueAssessmentJob } from "@/lib/ai/jobs";
 import { db } from "@/lib/db";
 import { detectSecretInUrl, detectSecrets, secretIssue, secretMessage } from "@/lib/evidence/secrets";
 
@@ -88,7 +89,7 @@ export async function saveProgress(
   return true;
 }
 
-export type SubmitResult = { ok: true; attempt: number } | { ok: false; error: string };
+export type SubmitResult = { ok: true; attempt: number; aiJobId?: string } | { ok: false; error: string };
 
 /**
  * Sends the current draft attempt for assessment. Requires at least one piece of real evidence (an attached vault item
@@ -136,6 +137,9 @@ export async function submitMission(userId: string, learnerMissionId: string, in
     await tx.activityRecord.create({
       data: { userId, type: "SUBMISSION_CREATED", entityType: "LearnerMission", entityId: lm.id, metadata: { attempt: draft.attempt } },
     });
-    return { ok: true as const, attempt: draft.attempt };
+    // With AI assessment on, the job is stored in this same transaction, after the submission and its evidence, so nothing is
+    // sent to the provider before they are durable. With it off (or over a limit) the learner assesses as before.
+    const queued = await enqueueAssessmentJob(tx, userId, draft.id);
+    return { ok: true as const, attempt: draft.attempt, aiJobId: queued.queued ? queued.jobId : undefined };
   });
 }

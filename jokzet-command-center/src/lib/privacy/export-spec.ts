@@ -72,6 +72,8 @@ export const EXPORTED: ExportSpec[] = [
   { key: "planPhases", model: "LearningPlanPhase", delegate: "learningPlanPhase", where: own },
   { key: "planItems", model: "LearningPlanItem", delegate: "learningPlanItem", where: own },
   { key: "planEvents", model: "LearningPlanEvent", delegate: "learningPlanEvent", where: own },
+  { key: "courseEnrolments", model: "CourseEnrolment", delegate: "courseEnrolment", where: own },
+  { key: "assessmentJobs", model: "AssessmentJob", delegate: "assessmentJob", where: own, omit: { lockedBy: true } },
   { key: "roleChanges", model: "RoleAudit", delegate: "roleAudit", where: (userId) => ({ targetUserId: userId }), omit: { actor: true } }, // the actor is an operator's machine account, not the learner's data
 ];
 

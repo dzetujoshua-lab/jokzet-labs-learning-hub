@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { WEEKLY_SCHEDULE } from "@/lib/departments";
 import { dateToISO, isoToDate, levelFromXp, toEnum, toLabel } from "@/lib/programme";
 import { earnedMission } from "./earned";
+import { visibleDepartmentIds } from "@/lib/enrolment/service";
 import { isPlanLinked } from "@/lib/plan/guards";
 import { createMissionSchema, milestoneSchema, type CreateMissionInput } from "./schema";
 
@@ -77,9 +78,11 @@ export async function listMissions(userId: string): Promise<MissionView[]> {
 }
 
 export async function listDepartments(userId: string): Promise<DepartmentView[]> {
+  // The learner's enrolled courses, from their own enrolments on the server. null = the original fixed programme (all nine).
+  const visible = await visibleDepartmentIds(userId);
   const [rows, levels] = await Promise.all([
     db.learnerDepartment.findMany({
-      where: { userId },
+      where: { userId, ...(visible ? { departmentId: { in: visible } } : {}) },
       include: { department: true },
       orderBy: { department: { sortOrder: "asc" } },
     }),
