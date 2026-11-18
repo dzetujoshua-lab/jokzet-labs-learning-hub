@@ -7,7 +7,9 @@ import { ProgressPanel } from "@/components/dashboard/progress-panel";
 import { ReminderRail } from "@/components/dashboard/reminder-rail";
 import { TodayMissions } from "@/components/dashboard/today-missions";
 import { UpcomingPanel } from "@/components/dashboard/upcoming-panel";
+import { LearnerHomeView } from "@/components/home/learner-home";
 import { requireUser } from "@/lib/auth/dal";
+import { getLearnerHome } from "@/lib/plan/home";
 import { getDashboardData } from "@/lib/dashboard";
 import {
   PROGRAMME_XP_PER_LEVEL, computeStreak, fmtLongToday, fmtWeekOf, sameIsoWeek, todayISO,
@@ -17,6 +19,9 @@ const STATUS_RANK = { active: 0, planned: 1, done: 2, skipped: 3 } as const;
 
 export default async function CommandPage() {
   const user = await requireUser();
+  // A learner on a personalised plan sees their own plan; everyone else keeps the original Command page.
+  const home = await getLearnerHome(user.id);
+  if (home) return <LearnerHomeView home={home} />;
   const { departments, missions, evidenceCount, assessmentsPassed, reminders, capstone, daily, upcoming } = await getDashboardData(user.id);
 
   const today = todayISO();
