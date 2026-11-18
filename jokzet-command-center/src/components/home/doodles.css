@@ -11,6 +11,8 @@
   pointer-events: none;
   --glow: 56 132 255; /* electric blue, used only as a soft glow */
 }
+/* Behind the page content without needing the content to be positioned (used inside the app, where the content is not). */
+.doodles.behind { z-index: -1; }
 
 .doodle {
   position: absolute;
@@ -18,9 +20,9 @@
   top: var(--y);
   width: var(--s);
   height: var(--s);
-  opacity: var(--o);
-  --h: calc(var(--h-base) * 1.3); /* a clearly visible hop on large screens */
-  --w: calc(var(--w-base) * 1.2);
+  opacity: calc(var(--o) * var(--fade, 1));
+  --h: calc(var(--h-base) * var(--amp, 1.3)); /* bounce size follows the page's intensity (see html[data-atmosphere] below) */
+  --w: calc(var(--w-base) * var(--amp, 1.3));
   color: hsl(var(--foreground));
   will-change: transform;
   animation-duration: var(--d);
@@ -91,4 +93,46 @@
 /* People who ask for less motion get the doodles standing still: no continuous movement at all. */
 @media (prefers-reduced-motion: reduce) {
   .doodle, .doodle svg { animation: none !important; will-change: auto; }
+}
+
+/*
+ * One shared engine, five intensities. The page (or a layout) sets html[data-atmosphere] and everything below follows: how many
+ * doodles show (tiers t0 to t3), how far they bounce (--amp), how visible they are (--fade) and whether the atmosphere layers
+ * and particles run. Unset means "low", so a page that says nothing gets the quiet version.
+ */
+html[data-atmosphere="rich"] .doodles { --amp: 1.3; --fade: 1; }
+html[data-atmosphere="medium"] .doodles { --amp: 0.9; --fade: 0.8; }
+html[data-atmosphere="medium"] .doodle.t3 { display: none; }
+html:not([data-atmosphere]) .doodles, html[data-atmosphere="low"] .doodles { --amp: 0.6; --fade: 0.55; }
+html:not([data-atmosphere]) .doodle.t2, html:not([data-atmosphere]) .doodle.t3, html[data-atmosphere="low"] .doodle.t2, html[data-atmosphere="low"] .doodle.t3 { display: none; }
+html[data-atmosphere="minimal"] .doodles { --amp: 0.35; --fade: 0.35; }
+html[data-atmosphere="minimal"] .doodle.t1, html[data-atmosphere="minimal"] .doodle.t2, html[data-atmosphere="minimal"] .doodle.t3 { display: none; }
+html[data-atmosphere="minimal"] .doodle { animation-duration: calc(var(--d) * 1.6); }
+
+/* Atmosphere: two slow gradient layers and a few particles. Gradients are static images moved with transform; no blur filter, no layout. */
+.atmos { position: absolute; inset: -20%; opacity: 0.9; }
+.atmos::before, .atmos::after { content: ""; position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; will-change: transform; }
+.atmos::before { left: -10%; top: -15%; background: radial-gradient(closest-side, rgb(var(--glow) / 0.16), transparent 70%); animation: drift-a 26s ease-in-out infinite alternate; }
+.atmos::after { right: -12%; bottom: -20%; background: radial-gradient(closest-side, rgb(120 130 160 / 0.12), transparent 70%); animation: drift-b 32s ease-in-out infinite alternate; }
+@keyframes drift-a { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(8vw, 6vh, 0); } }
+@keyframes drift-b { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-7vw, -5vh, 0); } }
+.particle { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); border-radius: 50%; background: rgb(var(--glow) / 0.6); opacity: 0; animation: rise var(--d) linear infinite; animation-delay: var(--delay); }
+@keyframes rise { 0% { transform: translate3d(0, 0, 0); opacity: 0; } 15% { opacity: 0.7; } 85% { opacity: 0.5; } 100% { transform: translate3d(var(--w), -90px, 0); opacity: 0; } }
+html[data-atmosphere="low"] .atmos, html[data-atmosphere="minimal"] .atmos, html:not([data-atmosphere]) .atmos { opacity: 0.45; }
+html[data-atmosphere="minimal"] .atmos::before, html[data-atmosphere="minimal"] .atmos::after { animation-duration: 60s; }
+html:not([data-atmosphere]) .particle, html[data-atmosphere="low"] .particle, html[data-atmosphere="minimal"] .particle, html[data-atmosphere="medium"] .particle { display: none; }
+@media (max-width: 640px) { .particle:nth-of-type(n+4) { display: none; } .atmos::after { display: none; } }
+
+/* Gentle entrance for each page and for cards that scroll into view. The content is visible from the start: the animation only
+   moves it a few pixels and never hides it, so nothing is lost if animation is off or fails. */
+@keyframes page-enter { from { opacity: 0.001; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+.page-enter { animation: page-enter 240ms ease-out both; }
+@supports (animation-timeline: view()) {
+  @keyframes reveal { from { opacity: 0.35; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
+  .reveal { animation: reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atmos::before, .atmos::after, .particle, .page-enter, .reveal { animation: none !important; }
+  .particle { display: none; }
 }

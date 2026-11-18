@@ -73,13 +73,29 @@ const DOODLES: Doodle[] = [
   { icon: "code", x: 34, y: 54, s: 28, o: 0.14, d: 4.0, delay: -3.3, h: 14, r: -5, kind: "a", large: true },
 ];
 
-export function BackgroundDoodles() {
+/** Four tiers: the first three doodles are the only ones that stay on the quietest pages; the last ones appear on the richest. */
+const tierOf = (i: number) => (i < 3 ? "t0" : i < 6 ? "t1" : i < 13 ? "t2" : "t3");
+const PARTICLES = [
+  { x: 14, y: 60, s: 4, d: 11, delay: -2, w: 18 }, { x: 33, y: 82, s: 3, d: 14, delay: -7, w: -14 }, { x: 52, y: 70, s: 5, d: 12, delay: -4, w: 22 },
+  { x: 70, y: 88, s: 3, d: 16, delay: -9, w: -20 }, { x: 86, y: 64, s: 4, d: 13, delay: -1, w: 12 }, { x: 24, y: 40, s: 3, d: 15, delay: -11, w: -10 },
+];
+
+/**
+ * The shared background. `behind` puts it under the page content with z-index -1 (for pages whose content is not positioned);
+ * the public pages put their content above it instead. How much of it shows, and how hard it bounces, is decided by
+ * html[data-atmosphere] (see RouteAtmosphere), so one markup serves every page.
+ */
+export function BackgroundDoodles({ behind = false }: { behind?: boolean }) {
   return (
-    <div className="doodles" aria-hidden="true">
+    <div className={`doodles${behind ? " behind" : ""}`} aria-hidden="true">
+      <div className="atmos" />
+      {PARTICLES.map((p, i) => (
+        <span key={i} className="particle" style={{ "--x": `${p.x}%`, "--y": `${p.y}%`, "--s": `${p.s}px`, "--d": `${p.d}s`, "--delay": `${p.delay}s`, "--w": `${p.w}px` } as CSSProperties} />
+      ))}
       {DOODLES.map((d, i) => {
         const style = { "--x": `${d.x}%`, "--y": `${d.y}%`, "--s": `${d.s}px`, "--o": d.o, "--d": `${d.d}s`, "--delay": `${d.delay}s`, "--h-base": `${d.h}px`, "--r": `${d.r}deg`, "--w-base": `${d.w ?? 0}px` } as CSSProperties;
         return (
-          <span key={i} className={`doodle ${d.kind} ${d.glow ?? ""} ${d.pulse ? "pulse" : ""} ${d.large ? "lg" : ""}`.replace(/\s+/g, " ").trim()} style={style}>
+          <span key={i} className={`doodle ${d.kind} ${tierOf(i)} ${d.glow ?? ""} ${d.pulse ? "pulse" : ""} ${d.large ? "lg" : ""}`.replace(/\s+/g, " ").trim()} style={style}>
             {ICONS[d.icon]}
           </span>
         );

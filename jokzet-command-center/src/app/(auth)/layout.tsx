@@ -1,8 +1,13 @@
+import { BackgroundDoodles } from "@/components/home/background-doodles";
+import { RouteAtmosphere } from "@/components/home/route-atmosphere";
 import { BrandLogo } from "@/components/brand-logo";
 import { LegalFooter } from "@/components/legal-footer";
 
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
+    <>
+    <BackgroundDoodles behind />
+    <RouteAtmosphere fixed="medium" />
     <main className="grid min-h-screen place-items-center px-4 py-10">
       <div className="w-full max-w-md space-y-7">
         <div className="flex items-center gap-3">
@@ -21,5 +26,6 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <LegalFooter className="text-center" />
       </div>
     </main>
+    </>
   );
 }

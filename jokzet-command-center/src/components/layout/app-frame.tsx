@@ -5,6 +5,8 @@ import { NavGate } from "@/components/layout/nav-gate";
 import { DesktopNav, MobileNav } from "@/components/layout/nav-links";
 import { MobileLevel, SidebarProgress, SidebarProgressFallback, SignOutButton } from "@/components/layout/sidebar-slots";
 import Loading from "@/app/(app)/loading";
+import { BackgroundDoodles } from "@/components/home/background-doodles";
+import { RouteAtmosphere } from "@/components/home/route-atmosphere";
 
 /**
  * The signed-in shell. `enforceOnboarding` sends a learner who has not confirmed a plan to /onboarding (the learning area).
@@ -13,6 +15,9 @@ import Loading from "@/app/(app)/loading";
  */
 export function AppFrame({ children, enforceOnboarding }: { children: React.ReactNode; enforceOnboarding: boolean }) {
   return (
+    <>
+      <BackgroundDoodles behind />
+      <RouteAtmosphere />
     <AppShell
       sidebarProgress={
         <Suspense fallback={<SidebarProgressFallback />}>
@@ -40,5 +45,6 @@ export function AppFrame({ children, enforceOnboarding }: { children: React.Reac
         <AuthGate enforceOnboarding={enforceOnboarding}>{children}</AuthGate>
       </Suspense>
     </AppShell>
+    </>
   );
 }
