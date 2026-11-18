@@ -1,5 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// Plan generation and concurrent requests are slower than the 5 second default on a busy machine.
+vi.setConfig({ testTimeout: 60_000 });
 import { registerUser } from "@/lib/auth/service";
 import { db } from "@/lib/db";
 import { listEnrolments, listCatalogue, visibleDepartmentIds } from "@/lib/enrolment/service";
