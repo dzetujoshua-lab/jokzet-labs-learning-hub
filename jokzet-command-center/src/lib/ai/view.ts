@@ -6,6 +6,8 @@ export type AiJobView = {
   status: JobState;
   /** True while the AI still owns the submission (no score yet). */
   processing: boolean;
+  /** True while the Academy's AI service is unavailable and the work is waiting to be assessed automatically. */
+  delayed: boolean;
   /** True once there is a stored score from the AI. */
   hasResult: boolean;
   label: string;
@@ -46,10 +48,14 @@ export async function getAiJobView(userId: string, submissionId: string): Promis
   const job = await db.assessmentJob.findFirst({ where: { submissionId, userId } });
   if (!job) return null;
   const status = job.status as JobState;
-  const base = LABEL[status];
+  const delayed = status === "RETRY_PENDING" && (job.errorCode === "BILLING" || job.errorCode === "AUTH");
+  const base = delayed
+    ? { label: "Assessment delayed", detail: "The AI assessor is temporarily unavailable. Your work is saved and will be assessed automatically as soon as it is back. If that takes more than a day, a reviewer will look at it instead." }
+    : LABEL[status];
   const result = (job.result ?? null) as { summary?: unknown; strengths?: unknown; improvements?: unknown; limitations?: unknown; nextSteps?: unknown } | null;
   return {
     status,
+    delayed,
     processing: ["QUEUED", "REVIEWING_EVIDENCE", "AI_IN_PROGRESS", "RETRY_PENDING"].includes(status) && !job.assessmentId,
     hasResult: !!job.assessmentId && !!result,
     label: base.label,

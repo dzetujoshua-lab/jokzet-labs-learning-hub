@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { rerunAssessmentJob } from "@/lib/ai/jobs";
 import { requireOnboardedUser as requireUser, requireRole } from "@/lib/auth/dal";
 import { cancelReviewRequest, claimRequest, completeReview, releaseRequest, requestReview, type Actor, type CompleteInput, type CompleteResult } from "@/lib/reviews/service";
 
@@ -36,6 +37,14 @@ export async function cancelReviewAction(assessmentId: string): Promise<Done> {
 // ── Reviewer ──
 export async function claimReviewAction(requestId: string): Promise<Done> {
   const r = await claimRequest(await reviewer(), idSchema.parse(requestId));
+  refresh();
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+/** Administrators only: send a job that stopped on a provider problem back to the AI. */
+export async function rerunAiAssessmentAction(jobId: string): Promise<Done> {
+  await requireRole("ADMIN");
+  const r = await rerunAssessmentJob(idSchema.parse(jobId));
   refresh();
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }

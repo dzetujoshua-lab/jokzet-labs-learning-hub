@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { aiConfig } from "@/lib/ai/config";
-import { enqueueAssessmentJob, processAssessmentJob, processDueAssessmentJobs } from "@/lib/ai/jobs";
+import { enqueueAssessmentJob, listAiJobProblems, processAssessmentJob, processDueAssessmentJobs, rerunAssessmentJob } from "@/lib/ai/jobs";
 import { DeepSeekProvider, ProviderError, setProviderForTests, type AssessmentProvider, type ProviderInput, type ProviderOutput } from "@/lib/ai/provider";
 import { getAiJobView } from "@/lib/ai/view";
 import { assessSubmission } from "@/lib/assessments/service";
@@ -281,12 +281,73 @@ describe("what the AI is allowed to return", () => {
     }
   }, 240_000);
 
-  it("a bad key, billing problem or invalid request is not retried: it goes straight to a person", async () => {
-    const { s, outcome } = await runWith("UXUI-L0-01", a, [new ProviderError("AUTH", false)]);
+  it("an invalid request is not retried: it goes straight to a person", async () => {
+    const { s, outcome } = await runWith("UXUI-L0-01", a, [new ProviderError("INVALID_REQUEST", false)]);
     expect(outcome).toBe("ESCALATED");
-    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", errorCode: "AUTH", attempts: 1 });
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", errorCode: "INVALID_REQUEST", attempts: 1 });
     await noAssessment(s.submission.id);
   });
+
+  it("no credit or a rejected key parks the work without spending an attempt, tells the learner plainly, and resumes by itself", async () => {
+    for (const [code, who] of [["BILLING", "ParkBilling"], ["AUTH", "ParkAuth"]] as const) {
+      const mission = "FSWD-L0-01";
+      const u = await learner(who);
+      const s = await submit(u, mission);
+      setProviderForTests(new FakeProvider([new ProviderError(code, false)]));
+      expect(await processAssessmentJob(s.jobId!), code).toBe("RETRY");
+      const parked = await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } });
+      expect(parked, code).toMatchObject({ status: "RETRY_PENDING", errorCode: code, attempts: 0 }); // the attempt is given back
+      expect(parked.nextAttemptAt.getTime()).toBeGreaterThan(Date.now() + 20 * 60 * 1000);
+      await noAssessment(s.submission.id);
+
+      const view = await getAiJobView(u, s.submission.id);
+      expect(view).toMatchObject({ delayed: true, processing: true, label: "Assessment delayed" });
+      expect(JSON.stringify(view).toLowerCase()).not.toMatch(/billing|balance|credit|key|402/); // the cause is the owner's business, not the learner's
+
+      // The owner fixes the account; the next pass picks the same job up and scores it. Nothing was lost or duplicated.
+      await db.assessmentJob.update({ where: { id: s.jobId! }, data: { nextAttemptAt: new Date(0) } });
+      const r = await rubricOf(mission);
+      setProviderForTests(new FakeProvider([out(goodJson(r, r.criteria.map((c) => c.maxPoints)))]));
+      expect(await processAssessmentJob(s.jobId!)).toBe("COMPLETE");
+      expect(await db.assessment.count({ where: { submissionId: s.submission.id } })).toBe(1);
+    }
+  }, 240_000);
+
+  it("while the provider refuses everything the batch stops after one call, and a fault that lasts a day goes to a person", async () => {
+    const s1 = await submit(await learner("Batch1"), "FSWD-L0-01");
+    const s2 = await submit(await learner("Batch2"), "FSWD-L0-01");
+    const fake = new FakeProvider([new ProviderError("BILLING", false)]);
+    setProviderForTests(fake);
+    await db.assessmentJob.updateMany({ where: { id: { in: [s1.jobId!, s2.jobId!] } }, data: { nextAttemptAt: new Date(0) } });
+    const stats = await processDueAssessmentJobs(5);
+    expect(stats.attempted).toBe(1);
+    expect(fake.calls).toHaveLength(1); // the second learner's work was not sent to a provider that is refusing
+
+    await db.assessmentJob.update({ where: { id: s1.jobId! }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000), nextAttemptAt: new Date(0) } });
+    expect(await processAssessmentJob(s1.jobId!)).toBe("ESCALATED");
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s1.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", escalation: "AI_UNAVAILABLE", errorCode: "BILLING" });
+  }, 240_000);
+
+  it("an administrator can re-run a job that stopped on a provider fault, once, and never one that has a result", async () => {
+    const s = await submit(await learner("Rerun"), "FSWD-L0-01");
+    setProviderForTests(new FakeProvider([new ProviderError("BILLING", false)]));
+    await processAssessmentJob(s.jobId!);
+    await db.assessmentJob.update({ where: { id: s.jobId! }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000), nextAttemptAt: new Date(0) } });
+    await processAssessmentJob(s.jobId!); // a day of refusals: now waiting for a person
+    expect((await listAiJobProblems()).map((p) => p.id)).toContain(s.jobId);
+
+    expect(await rerunAssessmentJob(s.jobId!)).toEqual({ ok: true });
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "QUEUED", attempts: 0, errorCode: null, escalation: null });
+    expect((await rerunAssessmentJob(s.jobId!)).ok).toBe(false); // already queued: a second click does nothing
+    const r = await rubricOf("FSWD-L0-01");
+    setProviderForTests(new FakeProvider([out(goodJson(r, r.criteria.map((c) => c.maxPoints)))]));
+    expect(await processAssessmentJob(s.jobId!)).toBe("COMPLETE");
+    expect((await rerunAssessmentJob(s.jobId!)).ok).toBe(false); // it has a result now
+    expect((await listAiJobProblems()).map((p) => p.id)).not.toContain(s.jobId);
+
+    const action = readFileSync("src/app/(app)/review/actions.ts", "utf8");
+    expect(action).toMatch(/rerunAiAssessmentAction[\s\S]*?requireRole\("ADMIN"\)/); // administrators only, checked on the server
+  }, 240_000);
 
   it("low confidence keeps the score but sends it to a reviewer, and says so", async () => {
     const r = await rubricOf("UXUI-L0-02");
