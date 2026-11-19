@@ -267,7 +267,8 @@ describe("the seed with an empty catalogue", () => {
     expect(fixtures[0].status).toBe("ARCHIVED"); // kept, not deleted
     expect(await db.resourceReview.count({ where: { resourceId: fixtures[0].id } })).toBe(1); // history survives
     expect(await db.resource.count()).toBe(legacyBefore);
-    expect(await hasApprovedPrimary(missionId)).toBe(false);
+    // The fixture was archived, so it no longer counts as an approved resource for any lesson (the real catalogue is loaded by the seed).
+    expect(await db.missionResource.count({ where: { resourceId: fixtures[0].id, resource: { status: "APPROVED" } } })).toBe(0);
   }, 180_000);
 });
 
