@@ -51,6 +51,9 @@ beforeAll(async () => {
   b = rb.userId;
   missionId = (await db.mission.findUniqueOrThrow({ where: { code: "FSWD-L0-01" } })).id;
   otherMissionId = (await db.mission.findUniqueOrThrow({ where: { code: "SEC-L0-01" } })).id;
+  // The seed now loads the real approved catalogue. These tests build their own fixtures on these three lessons, so start them clean.
+  const lessons = await db.mission.findMany({ where: { code: { in: ["FSWD-L0-01", "FSWD-L0-02", "SEC-L0-01"] } }, select: { id: true } });
+  await db.missionResource.deleteMany({ where: { missionId: { in: lessons.map((l) => l.id) } } });
   const ids = {
     primary: await make(URLS.primary, { status: "APPROVED" }),
     extra: await make(URLS.extra, { status: "APPROVED" }),
