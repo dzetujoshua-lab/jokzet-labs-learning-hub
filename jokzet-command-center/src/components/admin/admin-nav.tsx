@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardCheck, GraduationCap, LayoutDashboard, LogOut, Users } from "lucide-react";
+import { Bot, ClipboardCheck, GraduationCap, LayoutDashboard, LogOut, UsersRound, Users } from "lucide-react";
 
 /**
  * The Administration Centre's navigation. Only pages that exist are listed, so there are no dead links; more entries are added as
@@ -13,8 +13,10 @@ type Item = { to: string; label: string; icon: typeof Users; end?: boolean };
 const GROUPS: { title: string; items: Item[] }[] = [
   { title: "Administration", items: [
     { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
+    { to: "/admin/learners", label: "Learners", icon: UsersRound },
     { to: "/admin/staff", label: "Staff and Roles", icon: Users },
     { to: "/admin/curriculum", label: "Curriculum", icon: GraduationCap },
+    { to: "/admin/ai", label: "AI Assessment Centre", icon: Bot },
     { to: "/review", label: "Review Queue", icon: ClipboardCheck },
   ] },
   { title: "Quick links", items: [{ to: "/", label: "Learner view", icon: LogOut }] },

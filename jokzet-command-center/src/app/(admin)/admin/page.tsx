@@ -139,6 +139,8 @@ export default async function AdminDashboardPage() {
                   { href: "/admin/staff?role=AUTHOR#assign-h", label: "Assign Curriculum Manager", icon: GraduationCap, tone: "kpi-violet" },
                   { href: "/review", label: "Review assessments", icon: ClipboardCheck, tone: "kpi-amber" },
                   { href: "/admin/curriculum", label: "Curriculum and resources", icon: BookOpenCheck, tone: "kpi-teal" },
+                  { href: "/admin/ai", label: "AI Assessment Centre", icon: Activity, tone: "kpi-cyan" },
+                  { href: "/admin/learners", label: "Learners", icon: Users, tone: "kpi-blue" },
                 ].map((q) => (
                   <li key={q.href}>
                     <Link href={q.href} className={`kpi ${q.tone} glass-hover flex h-full flex-col items-center gap-2 p-3 text-center`}>
