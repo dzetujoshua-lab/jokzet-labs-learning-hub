@@ -31,10 +31,11 @@ async function requireAdmin(actorId: string) {
   return actor?.role === "ADMIN" ? actor : null;
 }
 
-export async function listStaff(actorId: string): Promise<Result<{ staff: StaffRow[]; departments: { code: string; name: string }[] }>> {
+export async function listStaff(actorId: string, search?: string): Promise<Result<{ staff: StaffRow[]; departments: { code: string; name: string }[] }>> {
   if (!(await requireAdmin(actorId))) return fail("Only an Academy Admin can manage staff.");
+  const q = (search ?? "").replace(/[%_\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
   const rows = await db.user.findMany({
-    where: { role: { not: "LEARNER" } },
+    where: { role: { not: "LEARNER" }, ...(q.length >= 2 ? { OR: [{ email: { contains: q, mode: "insensitive" as const } }, { profile: { displayName: { contains: q, mode: "insensitive" as const } } }] } : {}) },
     select: { id: true, email: true, role: true, profile: { select: { displayName: true } }, reviewerScopes: { select: { department: { select: { code: true } } } } },
     orderBy: [{ role: "asc" }, { email: "asc" }],
   });

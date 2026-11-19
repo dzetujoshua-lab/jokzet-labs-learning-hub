@@ -1,0 +1,91 @@
+/*
+ * The Administration Centre's own look: dark navy glass with blue, cyan, teal, violet and amber accents.
+ *
+ * Everything is scoped to `.admin-theme`, which only the admin layout puts on the page. It redefines the semantic colour tokens
+ * for that subtree alone (so shared components such as buttons, panels and charts follow along) and changes nothing in the
+ * global theme, so the learner interface keeps its own colours.
+ */
+.admin-theme {
+  --background: 224 55% 6%;
+  --foreground: 214 36% 96%;
+  --card: 222 46% 11%;
+  --card-foreground: 214 36% 96%;
+  --popover: 222 48% 9%;
+  --popover-foreground: 214 36% 96%;
+  --primary: 214 95% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 38% 17%;
+  --secondary-foreground: 214 36% 94%;
+  --muted: 222 34% 14%;
+  --muted-foreground: 215 20% 70%;
+  --accent: 222 38% 19%;
+  --accent-foreground: 214 36% 96%;
+  --destructive: 0 82% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 216 44% 26%;
+  --input: 216 40% 24%;
+  --ring: 189 94% 55%;
+  --chart-1: 214 95% 62%;
+  --chart-2: 266 82% 70%;
+  --chart-3: 160 72% 48%;
+  --chart-4: 38 96% 58%;
+  --chart-5: 189 94% 54%;
+  --chart-6: 330 82% 66%;
+  --sidebar-background: 224 58% 7%;
+  --admin-cyan: 189 94% 55%;
+  --admin-teal: 160 72% 48%;
+  --admin-violet: 266 82% 70%;
+  --admin-amber: 38 96% 58%;
+  min-height: 100vh;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(900px 500px at 12% -10%, hsl(214 95% 45% / 0.28), transparent 60%),
+    radial-gradient(700px 420px at 95% 5%, hsl(266 82% 55% / 0.18), transparent 60%),
+    radial-gradient(800px 500px at 60% 110%, hsl(189 94% 45% / 0.14), transparent 60%),
+    hsl(var(--background));
+}
+
+/* Glass surfaces: translucent, softly bordered, lightly blurred. */
+.admin-theme .glass,
+.admin-theme .panel {
+  background: linear-gradient(150deg, hsl(222 52% 15% / 0.74), hsl(222 52% 9% / 0.62));
+  border: 1px solid hsl(214 70% 55% / 0.22);
+  border-radius: 1.1rem;
+  box-shadow: 0 10px 34px -14px hsl(224 80% 3% / 0.8), inset 0 1px 0 hsl(214 80% 80% / 0.06);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.admin-theme .glass-hover { transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+.admin-theme .glass-hover:hover { transform: translate3d(0, -2px, 0); border-color: hsl(189 94% 55% / 0.5); box-shadow: 0 14px 38px -14px hsl(189 94% 45% / 0.35), inset 0 1px 0 hsl(214 80% 80% / 0.1); }
+
+/* KPI cards: each has its own accent, set by --kpi (an hsl triplet). */
+.admin-theme .kpi {
+  background: linear-gradient(150deg, hsl(var(--kpi) / 0.32), hsl(222 52% 10% / 0.7) 70%);
+  border: 1px solid hsl(var(--kpi) / 0.5);
+  border-radius: 1.1rem;
+  box-shadow: 0 12px 32px -16px hsl(var(--kpi) / 0.6), inset 0 1px 0 hsl(0 0% 100% / 0.08);
+}
+.admin-theme .kpi-blue { --kpi: 214 95% 60%; }
+.admin-theme .kpi-teal { --kpi: 160 72% 48%; }
+.admin-theme .kpi-violet { --kpi: 266 82% 66%; }
+.admin-theme .kpi-amber { --kpi: 38 96% 56%; }
+.admin-theme .kpi-cyan { --kpi: 189 94% 52%; }
+.admin-theme .kpi-icon { background: hsl(var(--kpi) / 0.22); color: hsl(var(--kpi)); border: 1px solid hsl(var(--kpi) / 0.5); }
+
+.admin-theme .admin-nav-active { background: linear-gradient(90deg, hsl(214 95% 58%), hsl(214 95% 48%)); color: #fff; box-shadow: 0 8px 22px -10px hsl(214 95% 55% / 0.9); }
+
+.admin-theme .hero-glow { background: linear-gradient(120deg, hsl(214 95% 40% / 0.5), hsl(266 82% 50% / 0.28) 55%, hsl(189 94% 45% / 0.22)); }
+
+.admin-theme .ticker { scrollbar-width: none; }
+.admin-theme .ticker::-webkit-scrollbar { display: none; }
+
+/* Entrance and chart transitions: transform and opacity only. */
+@keyframes admin-enter { from { opacity: 0.001; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+.admin-theme .admin-enter { animation: admin-enter 260ms ease-out both; }
+@keyframes admin-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -7px, 0); } }
+.admin-theme .admin-float { animation: admin-float 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-theme .admin-enter, .admin-theme .admin-float { animation: none !important; }
+  .admin-theme .glass-hover, .admin-theme .glass-hover:hover { transition: none !important; transform: none !important; }
+}

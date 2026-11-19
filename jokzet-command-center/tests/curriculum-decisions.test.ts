@@ -128,8 +128,8 @@ describe("assigning staff roles in the Admin Centre", () => {
   });
 
   it("the staff page and its actions are for Academy Admins only; the curriculum page is for Admins and Curriculum Managers", () => {
-    expect(read("src/app/(app)/admin/staff/page.tsx")).toContain('requireRole("ADMIN")');
-    expect(read("src/app/(app)/admin/staff/actions.ts").match(/requireRole\("ADMIN"\)/g)).toHaveLength(2);
+    expect(read("src/app/(admin)/admin/staff/page.tsx")).toContain('requireRole("ADMIN")');
+    expect(read("src/app/(admin)/admin/staff/actions.ts").match(/requireRole\("ADMIN"\)/g)).toHaveLength(2);
     expect(read("src/app/(app)/curriculum/page.tsx")).toContain('requireRole("ADMIN", "AUTHOR")');
   });
 });

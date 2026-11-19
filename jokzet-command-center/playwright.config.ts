@@ -10,7 +10,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  timeout: 120_000, // a journey registers, onboards and then walks several pages
+  expect: { timeout: 20_000 }, // the first request to a page after a build can take several seconds
   reporter: [["list"]],
+  globalSetup: "./e2e/setup.ts",
   globalTeardown: "./e2e/teardown.ts",
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
   projects: [

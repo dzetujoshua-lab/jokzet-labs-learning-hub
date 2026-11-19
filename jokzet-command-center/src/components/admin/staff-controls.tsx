@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setRoleAction, setScopeAction } from "@/app/(app)/admin/staff/actions";
+import { setRoleAction, setScopeAction } from "@/app/(admin)/admin/staff/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -15,10 +15,10 @@ const ROLES = [
 ] as const;
 
 /** Assign or remove a role by email. Making someone an Academy Admin asks for the address twice. */
-export function AssignRoleForm() {
+export function AssignRoleForm({ initialRole = "AUTHOR" }: { initialRole?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("AUTHOR");
+  const [role, setRole] = useState<string>(ROLES.some((r) => r.value === initialRole) ? initialRole : "AUTHOR");
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
