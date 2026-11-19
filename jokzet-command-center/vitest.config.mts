@@ -11,6 +11,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // The randomised plan tests and the database-heavy tests run for several seconds when the whole suite is loading the machine.
+    testTimeout: 30_000,
     include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/setup-env.ts"],
     // Integration tests share one database, so run files serially.

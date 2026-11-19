@@ -10,5 +10,6 @@ import { DesktopNav, MobileNav } from "./nav-links";
 export async function NavGate({ variant }: { variant: "desktop" | "mobile" }) {
   const user = await requireUser();
   const show = await timetableAccess(user.id);
-  return variant === "desktop" ? <DesktopNav showTimetable={show} /> : <MobileNav showTimetable={show} />;
+  const admin = user.role === "ADMIN"; // the link only points the way; /admin checks the role again on the server
+  return variant === "desktop" ? <DesktopNav showTimetable={show} showAdmin={admin} /> : <MobileNav showTimetable={show} showAdmin={admin} />;
 }

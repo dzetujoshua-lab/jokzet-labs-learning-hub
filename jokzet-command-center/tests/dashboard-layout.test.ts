@@ -163,7 +163,7 @@ describe("the new layout", () => {
     const routes = [...nav.matchAll(/to: "(\/[a-z-]*)"/g)].map((m) => m[1]);
     expect(routes.length).toBeGreaterThanOrEqual(10);
     for (const route of [...routes, "/search", "/settings", "/courses"]) {
-      const pages = route === "/" ? ["src/app/(app)/page.tsx"] : [`src/app/(app)${route}/page.tsx`, `src/app/(account)${route}/page.tsx`];
+      const pages = route === "/" ? ["src/app/(app)/page.tsx"] : [`src/app/(app)${route}/page.tsx`, `src/app/(account)${route}/page.tsx`, `src/app/(admin)${route}/page.tsx`];
       expect(pages.some((p) => existsSync(p)), `${route} -> ${pages.join(" or ")}`).toBe(true);
     }
     expect(read("src/components/layout/header-bar.tsx")).toContain('action="/search"');
