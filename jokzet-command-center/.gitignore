@@ -54,3 +54,7 @@ next-env.d.ts
 
 # Netlify local link state
 .netlify
+
+# Playwright
+/test-results/
+/playwright-report/
