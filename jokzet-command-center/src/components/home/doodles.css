@@ -135,4 +135,20 @@ html:not([data-atmosphere]) .particle, html[data-atmosphere="low"] .particle, ht
 @media (prefers-reduced-motion: reduce) {
   .atmos::before, .atmos::after, .particle, .page-enter, .reveal { animation: none !important; }
   .particle { display: none; }
+  .hero-a, .hero-b, .hero-c { animation: none !important; }
+  .dash-card, .ring-arc, .bar-fill { transition: none !important; }
+  .dash-card:hover { transform: none; }
 }
+
+/* Welcome banner illustration and dashboard widgets: transform and opacity only; all of it stops for reduced motion. */
+@keyframes hero-float-a { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -6px, 0); } }
+@keyframes hero-float-b { 0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(0, -9px, 0) rotate(2deg); } }
+@keyframes hero-float-c { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -12px, 0); } }
+.hero-a { animation: hero-float-a 5.2s ease-in-out infinite; }
+.hero-b { animation: hero-float-b 6.4s ease-in-out infinite; animation-delay: -2s; }
+.hero-c { animation: hero-float-c 4.6s ease-in-out infinite; animation-delay: -1s; }
+.hero-a, .hero-b, .hero-c { transform-box: fill-box; transform-origin: center; }
+.dash-card { transition: transform 200ms ease, border-color 200ms ease; }
+.dash-card:hover { transform: translate3d(0, -2px, 0); }
+.ring-arc { transition: stroke-dasharray 700ms ease; }
+.bar-fill { transition: width 700ms ease; }

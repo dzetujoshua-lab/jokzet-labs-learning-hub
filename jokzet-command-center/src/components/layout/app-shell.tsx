@@ -1,5 +1,6 @@
 import { BrandLogo } from "@/components/brand-logo";
 import { LegalFooter } from "@/components/legal-footer";
+import { SearchBox } from "./header-bar";
 import { DesktopNav, MobileNav } from "./nav-links";
 
 /** Layout copied from the Base44 export (src/components/Layout.jsx): 248px sidebar, sticky mobile header, 1180px main. */
@@ -10,6 +11,7 @@ export function AppShell({
   signOut,
   desktopNav = <DesktopNav />,
   mobileNav = <MobileNav />,
+  headerStatus,
 }: {
   children: React.ReactNode;
   sidebarProgress: React.ReactNode;
@@ -18,6 +20,8 @@ export function AppShell({
   /** The primary navigation. The layout passes a version that knows whether to show the Timetable link. */
   desktopNav?: React.ReactNode;
   mobileNav?: React.ReactNode;
+  /** XP and notifications, shown at the right of the top bar. */
+  headerStatus?: React.ReactNode;
 }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
@@ -45,6 +49,12 @@ export function AppShell({
       </aside>
 
       <div className="min-w-0">
+        <div className="sticky top-0 z-20 hidden border-b border-border bg-background/85 backdrop-blur lg:block">
+          <div className="mx-auto flex w-full max-w-[1180px] items-center gap-4 px-10 py-3">
+            <SearchBox className="max-w-md flex-1" />
+            <div className="ml-auto">{headerStatus}</div>
+          </div>
+        </div>
         <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur lg:hidden">
           <div className="flex items-center justify-between px-4 pb-3 pt-4">
             <div className="flex items-center gap-3">
@@ -54,8 +64,9 @@ export function AppShell({
                 <p className="font-display text-sm font-medium text-foreground">Learning Command Center</p>
               </div>
             </div>
-            {mobileLevel}
+            <div className="flex items-center gap-2">{headerStatus ?? mobileLevel}</div>
           </div>
+          <SearchBox className="px-4 pb-3" />
           {mobileNav}
         </header>
 
