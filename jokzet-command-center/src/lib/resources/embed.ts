@@ -6,7 +6,12 @@
  * (youtube-nocookie.com); every other resource is shown as an external link. Adding a host is a reviewed code change.
  */
 
-type HostInfo = { provider: string };
+/**
+ * `pathPrefixes` narrows a host to the documentation paths that were actually reviewed: a link is accepted only if its path is
+ * one of them (matched on whole path segments, so "/book" does not admit "/bookmarks"). `approval` records who allowed the host
+ * and when. Hosts without a restriction were approved with the original catalogue.
+ */
+type HostInfo = { provider: string; pathPrefixes?: readonly string[]; approval?: { by: string; at: string; note: string } };
 
 /** Hosts an approved resource may point to. Official documentation and a video provider; extend by pull request. */
 export const ALLOWED_RESOURCE_HOSTS: Record<string, HostInfo> = {
@@ -26,7 +31,22 @@ export const ALLOWED_RESOURCE_HOSTS: Record<string, HostInfo> = {
   "react.dev": { provider: "react-docs" },
   "www.w3.org": { provider: "w3c" },
   "web.dev": { provider: "web-dev" },
+  // Approved 2026-11-19 by the Academy owner's written decision (recorded in this pull request): the official Nmap reference
+  // guide and the Nmap Network Scanning book only. Nothing else on nmap.org is accepted.
+  "nmap.org": {
+    provider: "nmap-docs",
+    pathPrefixes: ["/book"],
+    approval: { by: "Academy owner (GitHub account dzetujoshua-lab)", at: "2026-11-19", note: "Official Nmap documentation, https only, /book paths only" },
+  },
 };
+
+/** Does the path sit inside one of the host's approved documentation paths? (Whole path segments only.) */
+function pathAllowed(info: HostInfo, pathname: string): boolean {
+  if (!info.pathPrefixes) return true;
+  const clean = pathname.replace(/\/{2,}/g, "/");
+  if (clean.split("/").some((seg) => seg === ".." || seg === ".")) return false;
+  return info.pathPrefixes.some((p) => clean === p || clean.startsWith(`${p}/`));
+}
 
 export const EMBED_HOST = "www.youtube-nocookie.com";
 
@@ -53,6 +73,7 @@ export function parseResourceUrl(input: string): ResourceLink {
   if (url.port) return { ok: false, error: "Links must not use a custom port." };
   const info = ALLOWED_RESOURCE_HOSTS[url.hostname.toLowerCase()];
   if (!info) return { ok: false, error: `${url.hostname} is not an approved resource host.` };
+  if (!pathAllowed(info, url.pathname)) return { ok: false, error: `Only approved documentation pages on ${url.hostname} are allowed.` };
 
   if (info.provider === "youtube") {
     const host = url.hostname.toLowerCase();

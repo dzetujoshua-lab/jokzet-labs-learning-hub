@@ -54,6 +54,13 @@ export default async function ReviewQueuePage() {
         title="Review queue"
         description="Learners' self-assessments waiting to be verified. Claim one to see the work and its evidence; every file you open is logged. You never see your own work here."
       />
+      {user.role === "ADMIN" ? (
+        <p className="text-sm">
+          <Link className="text-primary underline-offset-4 hover:underline" href="/curriculum">Curriculum</Link>
+          <span className="text-muted-foreground"> · </span>
+          <Link className="text-primary underline-offset-4 hover:underline" href="/admin/staff">Staff and roles</Link>
+        </p>
+      ) : null}
       {mine.length ? (
         <section className="panel overflow-hidden">
           <div className="border-b border-border px-5 py-4"><p className="mono-label">Claimed by you · {mine.length}</p></div>
