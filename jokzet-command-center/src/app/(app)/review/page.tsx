@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { ClaimButton } from "@/components/reviews/review-controls";
 import { Button } from "@/components/ui/button";
+import { RerunButton } from "@/components/reviews/rerun-button";
+import { listAiJobProblems } from "@/lib/ai/jobs";
 import { requireRole } from "@/lib/auth/dal";
 import { fmtDate, metaFor } from "@/lib/programme";
 import { listContentGaps } from "@/lib/resources/gaps";
@@ -19,6 +21,7 @@ export default async function ReviewQueuePage() {
   const open = queue.filter((q) => !q.mine);
   // Administrators also see which published missions still have no approved learning video or guide.
   const gaps = user.role === "ADMIN" ? await listContentGaps() : [];
+  const aiProblems = user.role === "ADMIN" ? await listAiJobProblems() : [];
 
   const row = (q: (typeof queue)[number]) => {
     const meta = metaFor(q.departmentCode);
@@ -64,6 +67,24 @@ export default async function ReviewQueuePage() {
         </section>
       ) : mine.length === 0 ? (
         <EmptyState icon={ClipboardCheck} title="Nothing to review" hint="When a learner in your departments asks for a review, it will appear here." />
+      ) : null}
+      {user.role === "ADMIN" && aiProblems.length ? (
+        <section className="panel overflow-hidden" aria-labelledby="ai-h">
+          <div className="border-b border-border px-5 py-4">
+            <p id="ai-h" className="mono-label">AI assessment problems · {aiProblems.length}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">The AI service refused these. `Waiting` ones are retried automatically every 30 minutes (for up to a day) once the cause is fixed, for example the provider account balance or key. Once it is fixed, re-run any that went to a person.</p>
+          </div>
+          <ul>
+            {aiProblems.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 px-5 py-3 last:border-0">
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{p.missionCode ?? "·"}</span>
+                <span className="min-w-0 flex-1 text-sm text-foreground">{p.missionTitle}</span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{p.code === "BILLING" ? "Provider balance" : p.code === "AUTH" ? "Provider key" : p.code.toLowerCase()} · {fmtDate(p.createdAt.toISOString())}</span>
+                {p.parked ? <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary">Waiting, retrying</span> : <RerunButton jobId={p.id} />}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       {user.role === "ADMIN" ? (
         <section className="panel overflow-hidden" aria-labelledby="gaps-h">

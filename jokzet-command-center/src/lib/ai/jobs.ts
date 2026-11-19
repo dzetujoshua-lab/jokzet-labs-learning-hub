@@ -14,6 +14,16 @@ type Tx = Prisma.TransactionClient | typeof db;
 
 /** The stale-lock window: a worker that died mid-job loses its claim after this long, and another worker may take over. */
 const STALE_LOCK_MS = 10 * 60 * 1000;
+/**
+ * Faults that are the Academy's to fix, not the learner's work: no credit on the provider account, or a rejected key. The job is
+ * parked (no attempt spent, retried every half hour) so it resumes by itself once the owner fixes it, and only goes to a person
+ * if the fault lasts more than a day, so a learner is never stuck waiting on the AI for long.
+ */
+export const PARK_CODES = ["BILLING", "AUTH"] as const;
+const PARK_RETRY_MS = 30 * 60 * 1000;
+const PARK_MAX_MS = 24 * 60 * 60 * 1000;
+/** Failures an administrator may send back to the AI once the cause is fixed (never a result, never a bad submission). */
+export const RERUN_CODES = ["BILLING", "AUTH", "TIMEOUT", "NETWORK", "SERVER", "RATE_LIMIT", "EMPTY", "TRUNCATED", "SCHEMA_INVALID"] as const;
 const backoffMs = (attempt: number) => Math.min(15 * 60 * 1000, 30_000 * 2 ** Math.max(0, attempt - 1));
 
 export const aiAssessmentEnabled = () => aiConfig().enabled;
@@ -52,7 +62,12 @@ async function escalate(jobId: string, workerId: string, escalation: string, err
   return "ESCALATED";
 }
 
-async function retryOrEscalate(jobId: string, workerId: string, attempts: number, code: string, retryable: boolean): Promise<Outcome> {
+async function retryOrEscalate(jobId: string, workerId: string, attempts: number, code: string, retryable: boolean, createdAt?: Date): Promise<Outcome> {
+  if ((PARK_CODES as readonly string[]).includes(code) && createdAt && Date.now() - createdAt.getTime() < PARK_MAX_MS) {
+    await db.assessmentJob.updateMany({ where: { id: jobId, lockedBy: workerId }, data: { status: "RETRY_PENDING", errorCode: code, attempts: { decrement: 1 }, nextAttemptAt: new Date(Date.now() + PARK_RETRY_MS), lockedAt: null, lockedBy: null } });
+    return "RETRY";
+  }
+  if ((PARK_CODES as readonly string[]).includes(code)) return escalate(jobId, workerId, "AI_UNAVAILABLE", code); // parked for a full day: a person looks
   if (retryable && attempts < aiConfig().maxAttempts) {
     await db.assessmentJob.updateMany({ where: { id: jobId, lockedBy: workerId }, data: { status: "RETRY_PENDING", errorCode: code, nextAttemptAt: new Date(Date.now() + backoffMs(attempts)), lockedAt: null, lockedBy: null } });
     return "RETRY";
@@ -114,7 +129,7 @@ export async function processAssessmentJob(jobId: string, now: Date = new Date()
     out = await provider.assess({ model: chosen, messages: buildMessages(ctx, rubric, pkg), maxOutputTokens: cfg.maxOutputTokens, timeoutMs: cfg.timeoutMs });
   } catch (error) {
     const code = error instanceof ProviderError ? error.code : "NETWORK";
-    return retryOrEscalate(jobId, workerId, job.attempts, code, error instanceof ProviderError ? error.retryable : true);
+    return retryOrEscalate(jobId, workerId, job.attempts, code, error instanceof ProviderError ? error.retryable : true, job.createdAt);
   }
 
   const checked = validateAiResult(out.content, rubric, pkg.refs);
@@ -198,6 +213,42 @@ export async function processDueAssessmentJobs(limit = 5, now: Date = new Date()
     if (o === "COMPLETE") stats.complete += 1;
     else if (o === "ESCALATED") stats.escalated += 1;
     else stats.retry += 1;
+    if (o === "RETRY") {
+      // If the provider itself is refusing every call (no credit, bad key), stop here: the rest would fail the same way.
+      const again = await db.assessmentJob.findUnique({ where: { id: j.id }, select: { errorCode: true } });
+      if (again?.errorCode && (PARK_CODES as readonly string[]).includes(again.errorCode)) break;
+    }
   }
   return stats;
+}
+
+export type AiJobProblem = { id: string; code: string; parked: boolean; createdAt: Date; missionCode: string | null; missionTitle: string };
+
+/** Admin view: jobs the AI could not finish because of a provider fault. `parked` ones retry by themselves; the rest can be re-run. */
+export async function listAiJobProblems(): Promise<AiJobProblem[]> {
+  const rows = await db.assessmentJob.findMany({
+    where: {
+      assessmentId: null,
+      OR: [
+        { status: "RETRY_PENDING", errorCode: { in: [...PARK_CODES] } },
+        { status: "NEEDS_HUMAN_REVIEW", errorCode: { in: [...RERUN_CODES] } },
+      ],
+    },
+    orderBy: { createdAt: "desc" }, take: 50,
+    select: { id: true, status: true, errorCode: true, createdAt: true, submission: { select: { learnerMission: { select: { mission: { select: { code: true, title: true } } } } } } },
+  });
+  return rows.map((r) => ({ id: r.id, code: r.errorCode ?? "", parked: r.status === "RETRY_PENDING", createdAt: r.createdAt, missionCode: r.submission.learnerMission.mission.code, missionTitle: r.submission.learnerMission.mission.title }));
+}
+
+/**
+ * Sends a job that stopped on a provider fault back to the AI (for example after the account has been topped up). Only a job with
+ * no stored result, still waiting on a person, whose submission is still submitted. Safe to repeat: a second call finds it queued.
+ */
+export async function rerunAssessmentJob(jobId: string, now: Date = new Date()): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!aiConfig().enabled) return { ok: false, error: "AI assessment is switched off." };
+  const done = await db.assessmentJob.updateMany({
+    where: { id: jobId, assessmentId: null, status: "NEEDS_HUMAN_REVIEW", errorCode: { in: [...RERUN_CODES] }, submission: { status: "SUBMITTED" } },
+    data: { status: "QUEUED", attempts: 0, errorCode: null, escalation: null, nextAttemptAt: now, lockedAt: null, lockedBy: null },
+  });
+  return done.count === 1 ? { ok: true } : { ok: false, error: "This assessment can't be re-run (it already has a result, or was not stopped by a provider problem)." };
 }

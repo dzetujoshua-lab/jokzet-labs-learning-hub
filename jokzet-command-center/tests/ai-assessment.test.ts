@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { aiConfig } from "@/lib/ai/config";
-import { enqueueAssessmentJob, processAssessmentJob, processDueAssessmentJobs } from "@/lib/ai/jobs";
-import { DeepSeekProvider, ProviderError, setProviderForTests, type AssessmentProvider, type ProviderInput, type ProviderOutput } from "@/lib/ai/provider";
+import { enqueueAssessmentJob, listAiJobProblems, processAssessmentJob, processDueAssessmentJobs, rerunAssessmentJob } from "@/lib/ai/jobs";
+import { DeepSeekProvider, GeminiProvider, ProviderError, setProviderForTests, type AssessmentProvider, type ProviderInput, type ProviderOutput } from "@/lib/ai/provider";
 import { getAiJobView } from "@/lib/ai/view";
 import { assessSubmission } from "@/lib/assessments/service";
 import { registerUser } from "@/lib/auth/service";
@@ -281,12 +281,73 @@ describe("what the AI is allowed to return", () => {
     }
   }, 240_000);
 
-  it("a bad key, billing problem or invalid request is not retried: it goes straight to a person", async () => {
-    const { s, outcome } = await runWith("UXUI-L0-01", a, [new ProviderError("AUTH", false)]);
+  it("an invalid request is not retried: it goes straight to a person", async () => {
+    const { s, outcome } = await runWith("UXUI-L0-01", a, [new ProviderError("INVALID_REQUEST", false)]);
     expect(outcome).toBe("ESCALATED");
-    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", errorCode: "AUTH", attempts: 1 });
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", errorCode: "INVALID_REQUEST", attempts: 1 });
     await noAssessment(s.submission.id);
   });
+
+  it("no credit or a rejected key parks the work without spending an attempt, tells the learner plainly, and resumes by itself", async () => {
+    for (const [code, who] of [["BILLING", "ParkBilling"], ["AUTH", "ParkAuth"]] as const) {
+      const mission = "FSWD-L0-01";
+      const u = await learner(who);
+      const s = await submit(u, mission);
+      setProviderForTests(new FakeProvider([new ProviderError(code, false)]));
+      expect(await processAssessmentJob(s.jobId!), code).toBe("RETRY");
+      const parked = await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } });
+      expect(parked, code).toMatchObject({ status: "RETRY_PENDING", errorCode: code, attempts: 0 }); // the attempt is given back
+      expect(parked.nextAttemptAt.getTime()).toBeGreaterThan(Date.now() + 20 * 60 * 1000);
+      await noAssessment(s.submission.id);
+
+      const view = await getAiJobView(u, s.submission.id);
+      expect(view).toMatchObject({ delayed: true, processing: true, label: "Assessment delayed" });
+      expect(JSON.stringify(view).toLowerCase()).not.toMatch(/billing|balance|credit|key|402/); // the cause is the owner's business, not the learner's
+
+      // The owner fixes the account; the next pass picks the same job up and scores it. Nothing was lost or duplicated.
+      await db.assessmentJob.update({ where: { id: s.jobId! }, data: { nextAttemptAt: new Date(0) } });
+      const r = await rubricOf(mission);
+      setProviderForTests(new FakeProvider([out(goodJson(r, r.criteria.map((c) => c.maxPoints)))]));
+      expect(await processAssessmentJob(s.jobId!)).toBe("COMPLETE");
+      expect(await db.assessment.count({ where: { submissionId: s.submission.id } })).toBe(1);
+    }
+  }, 240_000);
+
+  it("while the provider refuses everything the batch stops after one call, and a fault that lasts a day goes to a person", async () => {
+    const s1 = await submit(await learner("Batch1"), "FSWD-L0-01");
+    const s2 = await submit(await learner("Batch2"), "FSWD-L0-01");
+    const fake = new FakeProvider([new ProviderError("BILLING", false)]);
+    setProviderForTests(fake);
+    await db.assessmentJob.updateMany({ where: { id: { in: [s1.jobId!, s2.jobId!] } }, data: { nextAttemptAt: new Date(0) } });
+    const stats = await processDueAssessmentJobs(5);
+    expect(stats.attempted).toBe(1);
+    expect(fake.calls).toHaveLength(1); // the second learner's work was not sent to a provider that is refusing
+
+    await db.assessmentJob.update({ where: { id: s1.jobId! }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000), nextAttemptAt: new Date(0) } });
+    expect(await processAssessmentJob(s1.jobId!)).toBe("ESCALATED");
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s1.jobId! } })).toMatchObject({ status: "NEEDS_HUMAN_REVIEW", escalation: "AI_UNAVAILABLE", errorCode: "BILLING" });
+  }, 240_000);
+
+  it("an administrator can re-run a job that stopped on a provider fault, once, and never one that has a result", async () => {
+    const s = await submit(await learner("Rerun"), "FSWD-L0-01");
+    setProviderForTests(new FakeProvider([new ProviderError("BILLING", false)]));
+    await processAssessmentJob(s.jobId!);
+    await db.assessmentJob.update({ where: { id: s.jobId! }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000), nextAttemptAt: new Date(0) } });
+    await processAssessmentJob(s.jobId!); // a day of refusals: now waiting for a person
+    expect((await listAiJobProblems()).map((p) => p.id)).toContain(s.jobId);
+
+    expect(await rerunAssessmentJob(s.jobId!)).toEqual({ ok: true });
+    expect(await db.assessmentJob.findUniqueOrThrow({ where: { id: s.jobId! } })).toMatchObject({ status: "QUEUED", attempts: 0, errorCode: null, escalation: null });
+    expect((await rerunAssessmentJob(s.jobId!)).ok).toBe(false); // already queued: a second click does nothing
+    const r = await rubricOf("FSWD-L0-01");
+    setProviderForTests(new FakeProvider([out(goodJson(r, r.criteria.map((c) => c.maxPoints)))]));
+    expect(await processAssessmentJob(s.jobId!)).toBe("COMPLETE");
+    expect((await rerunAssessmentJob(s.jobId!)).ok).toBe(false); // it has a result now
+    expect((await listAiJobProblems()).map((p) => p.id)).not.toContain(s.jobId);
+
+    const action = readFileSync("src/app/(app)/review/actions.ts", "utf8");
+    expect(action).toMatch(/rerunAiAssessmentAction[\s\S]*?requireRole\("ADMIN"\)/); // administrators only, checked on the server
+  }, 240_000);
 
   it("low confidence keeps the score but sends it to a reviewer, and says so", async () => {
     const r = await rubricOf("UXUI-L0-02");
@@ -415,5 +476,69 @@ describe("the real adapter", () => {
   it("never sends an image to a model that cannot see", async () => {
     const p = new DeepSeekProvider(async () => { throw new Error("must not be called"); });
     await expect(p.assess({ ...input, model: "deepseek-v4-pro", messages: [{ role: "user", content: [{ type: "text", text: "json" }, { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }] }] })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  });
+});
+
+describe("Gemini as the assessment provider", () => {
+  const ok = (body: unknown, status = 200) => async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  const input: ProviderInput = { model: "gemini-3.5-flash-lite", messages: [{ role: "system", content: "rubric rules" }, { role: "user", content: [{ type: "text", text: "the work" }, { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } }] }], maxOutputTokens: 100, timeoutMs: 2000 };
+  const vars = ["AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_ASSESSMENT_MODEL", "DEEPSEEK_ENABLED", "AI_ASSESSMENT_ENABLED", "DEEPSEEK_API_KEY"] as const;
+  const kept: Record<string, string | undefined> = {};
+  beforeEach(() => { for (const v of vars) kept[v] = process.env[v]; process.env.AI_PROVIDER = "gemini"; process.env.GEMINI_API_KEY = "gemini-test-key-not-real"; process.env.DEEPSEEK_ENABLED = "true"; delete process.env.AI_ASSESSMENT_ENABLED; });
+  afterEach(() => { for (const v of vars) { if (kept[v] === undefined) delete process.env[v]; else process.env[v] = kept[v]; } });
+
+  it("is chosen by AI_PROVIDER, needs its own key and the owner switch, and DeepSeek stays the default", () => {
+    expect(aiConfig()).toMatchObject({ provider: "gemini", enabled: true, assessmentModel: "gemini-3.5-flash-lite", baseUrl: "https://generativelanguage.googleapis.com", maxOutputTokens: 8000 });
+    delete process.env.GEMINI_API_KEY;
+    expect(aiConfig().enabled).toBe(false); // the DeepSeek key does not count for Gemini
+    process.env.GEMINI_API_KEY = "gemini-test-key-not-real";
+    process.env.DEEPSEEK_ENABLED = "false";
+    expect(aiConfig().enabled).toBe(false);
+    process.env.AI_ASSESSMENT_ENABLED = "true"; // the neutral switch name wins
+    expect(aiConfig().enabled).toBe(true);
+    process.env.GEMINI_ASSESSMENT_MODEL = "gemini-3.8-flash";
+    expect(aiConfig().assessmentModel).toBe("gemini-3.8-flash");
+    delete process.env.AI_PROVIDER;
+    expect(aiConfig()).toMatchObject({ provider: "deepseek", assessmentModel: "deepseek-flash" });
+  });
+
+  it("sends the key in a header (never the URL), the system rules, the text and the image, and asks for JSON", async () => {
+    let seen: { url: string; init: RequestInit } | null = null;
+    const p = new GeminiProvider(async (url, init) => { seen = { url: String(url), init: init! }; return ok({ candidates: [{ content: { parts: [{ text: "{}" }] }, finishReason: "STOP" }], usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 4, thoughtsTokenCount: 6 }, modelVersion: "gemini-3.5-flash-lite" })(); });
+    const res = await p.assess(input);
+    expect(res).toMatchObject({ content: "{}", tokensIn: 11, tokensOut: 10, finishReason: "STOP" }); // thinking tokens are billed as output, so they are counted
+    expect(seen!.url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent");
+    expect(seen!.url).not.toContain("gemini-test-key");
+    expect((seen!.init.headers as Record<string, string>)["x-goog-api-key"]).toBe("gemini-test-key-not-real");
+    expect(seen!.init.redirect).toBe("error");
+    expect(JSON.parse(String(seen!.init.body))).toMatchObject({
+      systemInstruction: { parts: [{ text: "rubric rules" }] },
+      contents: [{ role: "user", parts: [{ text: "the work" }, { inline_data: { mime_type: "image/png", data: "AAAA" } }] }],
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 100 },
+    });
+  });
+
+  it("maps failures to short codes without echoing provider text: no credit or a bad key park the work, a bad request does not", async () => {
+    const codes: [number, unknown, string, boolean][] = [[401, {}, "AUTH", false], [403, {}, "AUTH", false], [402, {}, "BILLING", false], [400, { error: { status: "FAILED_PRECONDITION", message: "secret sk-nope" } }, "BILLING", false], [400, { error: { status: "INVALID_ARGUMENT" } }, "INVALID_REQUEST", false], [429, {}, "RATE_LIMIT", true], [503, {}, "SERVER", true], [404, {}, "INVALID_REQUEST", false]];
+    for (const [status, body, code, retry] of codes) {
+      await expect(new GeminiProvider(ok(body, status)).assess(input), String(status)).rejects.toMatchObject({ code, retryable: retry, message: code });
+    }
+    const cand = (c: unknown) => ok({ candidates: [c] });
+    await expect(new GeminiProvider(cand({ content: { parts: [{ text: "{" }] }, finishReason: "MAX_TOKENS" })).assess(input)).rejects.toMatchObject({ code: "TRUNCATED" });
+    await expect(new GeminiProvider(cand({ finishReason: "SAFETY" })).assess(input)).rejects.toMatchObject({ code: "EMPTY" });
+    await expect(new GeminiProvider(ok({ promptFeedback: { blockReason: "SAFETY" } })).assess(input)).rejects.toMatchObject({ code: "INVALID_REQUEST", retryable: false });
+    await expect(new GeminiProvider(async () => { throw new TypeError("fetch failed"); }).assess(input)).rejects.toMatchObject({ code: "NETWORK" });
+    // Thinking text is never mistaken for the answer.
+    const r = await new GeminiProvider(cand({ content: { parts: [{ text: "reasoning", thought: true }, { text: "{\"a\":1}" }] }, finishReason: "STOP" })).assess(input);
+    expect(r.content).toBe('{"a":1}');
+  });
+
+  it("refuses to call out when Gemini is not the configured, enabled provider, and rejects odd model names and non-image data", async () => {
+    const never = async () => { throw new Error("must not be called"); };
+    process.env.AI_PROVIDER = "deepseek";
+    await expect(new GeminiProvider(never).assess(input)).rejects.toMatchObject({ code: "NOT_CONFIGURED" });
+    process.env.AI_PROVIDER = "gemini";
+    await expect(new GeminiProvider(never).assess({ ...input, model: "x/../y?key=1" })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    await expect(new GeminiProvider(never).assess({ ...input, messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://evil.example/a.png" } }] }] })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
 });
