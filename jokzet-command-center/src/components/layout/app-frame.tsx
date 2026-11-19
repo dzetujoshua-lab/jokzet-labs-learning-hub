@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { AuthGate } from "@/components/layout/auth-gate";
 import { NavGate } from "@/components/layout/nav-gate";
 import { DesktopNav, MobileNav } from "@/components/layout/nav-links";
+import { HeaderStatus, HeaderStatusFallback } from "@/components/layout/header-bar";
 import { MobileLevel, SidebarProgress, SidebarProgressFallback, SignOutButton } from "@/components/layout/sidebar-slots";
 import Loading from "@/app/(app)/loading";
 import { BackgroundDoodles } from "@/components/home/background-doodles";
@@ -30,6 +31,11 @@ export function AppFrame({ children, enforceOnboarding }: { children: React.Reac
         </Suspense>
       }
       signOut={<SignOutButton />}
+      headerStatus={
+        <Suspense fallback={<HeaderStatusFallback />}>
+          <HeaderStatus />
+        </Suspense>
+      }
       desktopNav={
         <Suspense fallback={<DesktopNav />}>
           <NavGate variant="desktop" />

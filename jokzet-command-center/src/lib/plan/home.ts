@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
-import { listEnrolments } from "@/lib/enrolment/service";
-import { listDepartments } from "@/lib/missions/service";
+import { listCatalogue, listEnrolments, type CourseOffer } from "@/lib/enrolment/service";
+import { getTotalXp, listDepartments } from "@/lib/missions/service";
+import { PROGRAMME_XP_PER_LEVEL } from "@/lib/programme";
 import { addDaysISO, localDateOf } from "@/lib/schedule/time";
 import { getPlanView, type PlanItemView } from "./service";
 
@@ -21,13 +22,25 @@ export type HomeCourse = {
   next: PlanItemView | null;
 };
 export type HomeDay = { date: string; label: string; isToday: boolean; sessions: PlanItemView[] };
-export type HomeContinue = { missionCode: string; title: string; course: string; reason: "IN_PROGRESS" | "NEEDS_REVISION" | "NEXT_SESSION" };
+export type HomeContinue = { missionCode: string; title: string; course: string; courseCode: string | null; percent: number | null; reason: "IN_PROGRESS" | "NEEDS_REVISION" | "NEXT_SESSION" };
+/** One day of the current Monday to Sunday week for the goal widget. */
+export type HomeGoalDay = { date: string; label: string; state: "DONE" | "MISSED" | "PENDING" | "UPCOMING" | "REST"; isToday: boolean };
+/** A skill from an enrolled course. `state` is CONFIRMED only when a reviewer confirmed it; SELF is an earlier, unconfirmed result. */
+export type HomeSkill = { name: string; courseCode: string; courseName: string; lessons: number; state: "CONFIRMED" | "SELF" | "NOT_YET" };
 export type HomeAssessmentRow = { id: string; kind: "AWAITING" | "REVISE" | "RESULT" | "CHECKPOINT"; title: string; detail: string; href: string };
 export type LearnerHome = {
   continue: HomeContinue | null;
   assessments: HomeAssessmentRow[];
   weekly: { planned: number; done: number; plannedMinutes: number; doneMinutes: number; label: string };
   focus: { working: string[]; confirmedSkills: number };
+  /** Official XP only (a reviewer's confirmation adds it). */
+  progress: { xp: number; level: number; xpIntoLevel: number; perLevel: number };
+  /** Today's planned and finished study minutes, and how each day of this week went. Planned and done are kept apart. */
+  goal: { plannedMinutes: number; doneMinutes: number; days: HomeGoalDay[] };
+  skills: HomeSkill[];
+  /** Published courses the learner could add: the catalogue, kept separate from their own courses. */
+  explore: CourseOffer[];
+  earnedAchievements: { name: string; description: string }[];
   displayName: string;
   today: string;
   timezone: string;
@@ -89,11 +102,11 @@ export async function getLearnerHome(userId: string, now: Date = new Date()): Pr
   const open = await db.learnerMission.findFirst({
     where: { userId, status: { in: ["NEEDS_REVISION", "IN_PROGRESS"] }, mission: { code: { not: null }, category: "CURRICULUM_MISSION", isPublished: true } },
     orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
-    select: { status: true, mission: { select: { code: true, title: true, department: { select: { name: true } } } } },
+    select: { status: true, mission: { select: { code: true, title: true, department: { select: { name: true, code: true } } } } },
   });
   const cont: HomeContinue | null = open?.mission.code
-    ? { missionCode: open.mission.code, title: open.mission.title, course: open.mission.department.name, reason: open.status === "NEEDS_REVISION" ? "NEEDS_REVISION" : "IN_PROGRESS" }
-    : nextSession?.missionCode ? { missionCode: nextSession.missionCode, title: nextSession.title, course: nextSession.departmentCode ? (courses.find((c) => c.code === nextSession.departmentCode)?.name ?? "") : "", reason: "NEXT_SESSION" } : null;
+    ? { missionCode: open.mission.code, title: open.mission.title, course: open.mission.department.name, courseCode: open.mission.department.code, percent: courses.find((c) => c.code === open.mission.department.code)?.percent ?? null, reason: open.status === "NEEDS_REVISION" ? "NEEDS_REVISION" : "IN_PROGRESS" }
+    : nextSession?.missionCode ? { missionCode: nextSession.missionCode, title: nextSession.title, course: nextSession.departmentCode ? (courses.find((c) => c.code === nextSession.departmentCode)?.name ?? "") : "", courseCode: nextSession.departmentCode ?? null, percent: nextSession.departmentCode ? (courses.find((c) => c.code === nextSession.departmentCode)?.percent ?? null) : null, reason: "NEXT_SESSION" } : null;
 
   // Assessments: what is waiting, what needs revising, the next checkpoint, and the last results with who scored them.
   const [awaiting, revise, recent] = await Promise.all([
@@ -124,6 +137,37 @@ export async function getLearnerHome(userId: string, now: Date = new Date()): Pr
     label: `${weekStart} to ${weekEnd}`,
   };
 
+  // The goal widget: today's planned minutes against finished minutes, and how each day of this Monday to Sunday week went.
+  const todayItems = live.filter((i) => i.date === today);
+  const goalDays: HomeGoalDay[] = Array.from({ length: 7 }, (_, n) => {
+    const date = addDaysISO(weekStart, n);
+    const items = live.filter((i) => i.date === date);
+    const state: HomeGoalDay["state"] = !items.length ? "REST"
+      : items.every((i) => i.done) ? "DONE"
+      : date > today ? "UPCOMING"
+      : items.some((i) => i.status === "MISSED" && !i.done) && date < today ? "MISSED"
+      : "PENDING";
+    return { date, label: WEEKDAY[weekdayOf(date)], state, isToday: date === today };
+  });
+  const goal = { plannedMinutes: todayItems.reduce((n, i) => n + i.minutes, 0), doneMinutes: todayItems.filter((i) => i.done).reduce((n, i) => n + i.minutes, 0), days: goalDays };
+
+  // Skills of the courses the learner is actually taking, with the honest state of each.
+  const enrolledCodes = courses.map((c) => c.code);
+  const skillRows = enrolledCodes.length ? await db.skill.findMany({
+    where: { department: { code: { in: enrolledCodes } } },
+    select: { name: true, department: { select: { code: true, name: true } }, missions: { where: { mission: { isPublished: true, createdById: null } }, select: { missionId: true } }, learners: { where: { userId }, select: { tier: true } } },
+    orderBy: [{ department: { sortOrder: "asc" } }, { name: "asc" }],
+  }) : [];
+  const skills: HomeSkill[] = skillRows
+    .filter((s) => s.missions.length > 0)
+    .map((s) => ({ name: s.name, courseCode: s.department.code, courseName: s.department.name, lessons: s.missions.length, state: s.learners[0] ? (s.learners[0].tier === "VERIFIED" ? "CONFIRMED" as const : "SELF" as const) : "NOT_YET" as const }));
+
+  const [xp, explore, achieved] = await Promise.all([
+    getTotalXp(userId),
+    listCatalogue(userId),
+    db.userAchievement.findMany({ where: { userId }, orderBy: { earnedAt: "desc" }, take: 5, select: { achievement: { select: { name: true, description: true } } } }),
+  ]);
+
   const done = live.filter((i) => i.done).length;
   const missed = live.filter((i) => i.status === "MISSED" && !i.done).length;
   const remaining = planned.length;
@@ -131,6 +175,8 @@ export async function getLearnerHome(userId: string, now: Date = new Date()): Pr
 
   return {
     continue: cont, assessments, weekly, focus: { working, confirmedSkills },
+    progress: { xp, level: Math.floor(xp / PROGRAMME_XP_PER_LEVEL), xpIntoLevel: xp % PROGRAMME_XP_PER_LEVEL, perLevel: PROGRAMME_XP_PER_LEVEL },
+    goal, skills, explore: explore.slice(0, 6), earnedAchievements: achieved.map((a) => a.achievement),
     displayName: profile.displayName, today, timezone: view.timezone, planPaused: view.status === "PAUSED", planEnds: view.endDate, todaySessions,
     minutesToday: todaySessions.reduce((n, i) => n + i.minutes, 0), nextSession, upcoming, week, courses,
     courseNames: Object.fromEntries(courses.map((c) => [c.code, c.name])),
