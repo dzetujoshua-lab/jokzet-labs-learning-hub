@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BellRing, BookOpen, CalendarDays, ClipboardCheck, Home, Images, Layers, LayoutGrid, ListChecks } from "lucide-react";
+import { BarChart3, BellRing, ShieldCheck, BookOpen, CalendarDays, ClipboardCheck, Home, Images, Layers, LayoutGrid, ListChecks } from "lucide-react";
 
 /**
  * Primary navigation, grouped like a learning app: learn, practise, progress. Every entry is a real route; nothing is listed
@@ -24,20 +24,23 @@ const EVIDENCE: NavItem = { to: "/evidence", label: "Evidence", icon: Images, en
 const PROGRESS: NavItem = { to: "/analytics", label: "My Progress", icon: BarChart3, end: false };
 const PORTFOLIO: NavItem = { to: "/portfolio", label: "Portfolio", icon: Layers, end: false };
 const REMINDERS: NavItem = { to: "/reminders", label: "Reminders", icon: BellRing, end: false };
+/** Shown only to Academy Admins (decided on the server). */
+const ADMIN: NavItem = { to: "/admin", label: "Administration Centre", icon: ShieldCheck, end: false };
 
-export const navGroups = (showTimetable?: boolean): readonly Group[] => [
+export const navGroups = (showTimetable?: boolean, showAdmin?: boolean): readonly Group[] => [
   { title: "Learn", items: [HOME, COURSES, MATERIALS, ...(showTimetable ? [TIMETABLE] : [])] },
   { title: "Practise", items: [ACTIVITIES, ASSESSMENTS, EVIDENCE] },
   { title: "Progress", items: [PROGRESS, PORTFOLIO, REMINDERS] },
+  ...(showAdmin ? [{ title: "Administration", items: [ADMIN] }] : []),
 ];
 
 const isActive = (pathname: string | null, to: string, end: boolean) =>
   pathname === null ? false : end ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
 
-function DesktopLinks({ pathname, showTimetable }: { pathname: string | null; showTimetable?: boolean }) {
+function DesktopLinks({ pathname, showTimetable, showAdmin }: { pathname: string | null; showTimetable?: boolean; showAdmin?: boolean }) {
   return (
     <nav aria-label="Primary" className="flex-1 space-y-5 overflow-y-auto px-3">
-      {navGroups(showTimetable).map((g) => (
+      {navGroups(showTimetable, showAdmin).map((g) => (
         <div key={g.title}>
           <p className="mono-label px-3 pb-1.5">{g.title}</p>
           <div className="space-y-0.5">
@@ -64,10 +67,10 @@ function DesktopLinks({ pathname, showTimetable }: { pathname: string | null; sh
   );
 }
 
-function MobileLinks({ pathname, showTimetable }: { pathname: string | null; showTimetable?: boolean }) {
+function MobileLinks({ pathname, showTimetable, showAdmin }: { pathname: string | null; showTimetable?: boolean; showAdmin?: boolean }) {
   return (
     <nav aria-label="Primary" className="flex gap-1.5 overflow-x-auto px-4 pb-3">
-      {navGroups(showTimetable).flatMap((g) => g.items).map(({ to, label, end }) => {
+      {navGroups(showTimetable, showAdmin).flatMap((g) => g.items).map(({ to, label, end }) => {
         const active = isActive(pathname, to, end);
         return (
           <Link
@@ -86,25 +89,25 @@ function MobileLinks({ pathname, showTimetable }: { pathname: string | null; sho
   );
 }
 
-function DesktopWithPath({ showTimetable }: { showTimetable?: boolean }) {
-  return <DesktopLinks pathname={usePathname()} showTimetable={showTimetable} />;
+function DesktopWithPath({ showTimetable, showAdmin }: { showTimetable?: boolean; showAdmin?: boolean }) {
+  return <DesktopLinks pathname={usePathname()} showTimetable={showTimetable} showAdmin={showAdmin} />;
 }
-function MobileWithPath({ showTimetable }: { showTimetable?: boolean }) {
-  return <MobileLinks pathname={usePathname()} showTimetable={showTimetable} />;
+function MobileWithPath({ showTimetable, showAdmin }: { showTimetable?: boolean; showAdmin?: boolean }) {
+  return <MobileLinks pathname={usePathname()} showTimetable={showTimetable} showAdmin={showAdmin} />;
 }
 
 /** usePathname() is runtime data; the Suspense fallback renders the same links without an active state. */
-export function DesktopNav({ showTimetable }: { showTimetable?: boolean } = {}) {
+export function DesktopNav({ showTimetable, showAdmin }: { showTimetable?: boolean; showAdmin?: boolean } = {}) {
   return (
-    <Suspense fallback={<DesktopLinks pathname={null} showTimetable={showTimetable} />}>
-      <DesktopWithPath showTimetable={showTimetable} />
+    <Suspense fallback={<DesktopLinks pathname={null} showTimetable={showTimetable} showAdmin={showAdmin} />}>
+      <DesktopWithPath showTimetable={showTimetable} showAdmin={showAdmin} />
     </Suspense>
   );
 }
-export function MobileNav({ showTimetable }: { showTimetable?: boolean } = {}) {
+export function MobileNav({ showTimetable, showAdmin }: { showTimetable?: boolean; showAdmin?: boolean } = {}) {
   return (
-    <Suspense fallback={<MobileLinks pathname={null} showTimetable={showTimetable} />}>
-      <MobileWithPath showTimetable={showTimetable} />
+    <Suspense fallback={<MobileLinks pathname={null} showTimetable={showTimetable} showAdmin={showAdmin} />}>
+      <MobileWithPath showTimetable={showTimetable} showAdmin={showAdmin} />
     </Suspense>
   );
 }

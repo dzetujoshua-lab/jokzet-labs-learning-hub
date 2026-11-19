@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getAdminOverview } from "@/lib/admin/overview";
+import { navGroups } from "@/components/layout/nav-links";
 import { listStaff, setStaffRole } from "@/lib/admin/staff";
 import { registerUser } from "@/lib/auth/service";
 import { db } from "@/lib/db";
@@ -130,6 +131,19 @@ describe("recent activity and alerts", () => {
     const o = await overview(ids.Boss);
     for (const a of o.alerts) expect(["info", "warn", "bad"]).toContain(a.level);
     expect(o.alerts.filter((a) => a.id === "reviews").every((a) => a.href === "/review")).toBe(true);
+  });
+});
+
+describe("how an administrator gets to the Administration Centre", () => {
+  const hrefs = (admin: boolean) => navGroups(true, admin).flatMap((g) => g.items.map((i) => i.to));
+
+  it("the learner menu shows the link to administrators only, and the server decides who is an administrator", () => {
+    expect(hrefs(false)).not.toContain("/admin");
+    expect(hrefs(true)).toContain("/admin");
+    expect(navGroups(false, true).find((g) => g.title === "Administration")?.items[0]).toMatchObject({ to: "/admin", label: "Administration Centre" });
+    const gate = read("src/components/layout/nav-gate.tsx");
+    expect(gate).toContain('user.role === "ADMIN"');
+    expect(gate).toMatch(/showAdmin=\{admin\}/);
   });
 });
 
